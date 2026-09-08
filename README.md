@@ -145,6 +145,35 @@ The demonstration covers:
 
 ---
 
+## Architecture
+
+The system follows an asynchronous, evidence-grounded fact knowledge pipeline.
+
+### High-Level Flow
+
+```text
+PDF Upload
+    ↓
+FastAPI API
+    ↓
+Celery + Redis
+    ↓
+PDF Parsing & Chunking
+    ↓
+LLM Fact Extraction
+    ↓
+Evidence Validation
+    ↓
+Entity Resolution
+    ↓
+Fact Clustering
+    ↓
+Fact Comparison
+    ↓
+PostgreSQL + pgvector
+    ↓
+React UI
+
 ## Required Demo Cases
 
 The system was evaluated against the four required reasoning and extraction cases.
@@ -217,11 +246,12 @@ The system was able to extract meaningful text values from the table, but the ta
 The pipeline validates extracted evidence against the original chunk text and retains confidence and review metadata. However, this particular example was not automatically flagged for review, demonstrating a limitation in the current extraction approach.
 
 **Planned improvement:**
+
 - Add table-aware PDF parsing.
 - Preserve row/column relationships explicitly.
 - Validate numerical values against table headers.
 - Add stronger confidence checks for ambiguous table extraction.
-- Route uncertain table facts to `needs_review`.
+- Route uncertain table facts to `needs_review` for future human review.
 
   ---
 
