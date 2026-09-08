@@ -454,3 +454,24 @@ The model was used for:
 - Generating relationship explanations.
 
 The rest of the system was deliberately kept deterministic where possible, particularly for evidence validation, data validation, persistence, and exact fact matching.
+
+---
+
+## Limitations and Next Steps
+
+### Current Limitations
+
+- **Table extraction:** Complex PDF tables can lose row/column relationships during parsing. This was observed while testing an unseen stock-report PDF.
+- **LLM processing speed:** Local Ollama inference with `qwen3:8b` can be slow for large PDFs or many chunks.
+- **Extraction reliability:** LLM output can sometimes be incomplete or malformed. Response validation and fallback handling are implemented, but difficult documents can still produce imperfect facts.
+- **Temporal reasoning:** Comparing facts across different quarters, years, or reporting periods can require deeper context.
+- **Human review:** The system has confidence and `needs_review` metadata, but does not yet provide a complete manual review workflow.
+
+### Next Steps
+
+- Add **table-aware PDF parsing** to preserve rows, columns, and headers.
+- Improve **fact and evidence validation**, especially for numerical values and units.
+- Strengthen **temporal reasoning and entity resolution** for more reliable cross-document comparisons.
+- Add a **human-in-the-loop review interface** for uncertain facts and relationships.
+- Improve **parallel processing and batching** for larger document collections.
+- Build a labeled evaluation dataset to measure extraction, grounding, and relationship accuracy.
