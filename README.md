@@ -126,6 +126,9 @@ http://localhost:5173
 **Demo video:** https://youtu.be/CNV7ICs5Wns
 
 The demo is under 3 minutes and shows the application processing a PDF through the UI.
+### Demo Preview
+
+![Fact Knowledge Layer Demo](docs/demo.gif)
 
 The demonstration covers:
 
