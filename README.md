@@ -475,3 +475,16 @@ The rest of the system was deliberately kept deterministic where possible, parti
 - Add a **human-in-the-loop review interface** for uncertain facts and relationships.
 - Improve **parallel processing and batching** for larger document collections.
 - Build a labeled evaluation dataset to measure extraction, grounding, and relationship accuracy.
+
+  ---
+
+## Additional Notes
+
+- The system was designed as a **general-purpose fact knowledge layer**, rather than a solution tailored to a specific company, document type, or fixed schema.
+- The pipeline is **LLM-provider flexible**. The extraction and comparison layers are isolated from the rest of the application, allowing the system to work with providers such as **OpenAI/ChatGPT APIs, Google Gemini APIs, or local Ollama models** without changing the core knowledge-layer architecture.
+- During development, **Gemini API quota limitations** were encountered, so the system was tested using **Ollama with `qwen3:8b` locally**. This allowed development and testing to continue without depending on an external API.
+- The system is built around **evidence-first extraction**: facts are not treated as useful unless they can be traced back to source document evidence.
+- The implementation combines **LLM reasoning with deterministic validation**, rather than relying entirely on an LLM. This improves reliability for evidence validation, exact matches, structured output, and persistence.
+- The application supports **asynchronous PDF processing**, making it suitable for extending to larger documents and multiple-document knowledge bases.
+- Testing with additional unseen PDFs was used to identify real extraction limitations, particularly around complex tables, rather than adding document-specific rules to make individual examples pass.
+- The project prioritizes **generalization, traceability, and explainable cross-document reasoning** so that users can understand not only the extracted fact, but also where it came from and why relationships between facts were created.
