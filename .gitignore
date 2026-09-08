@@ -1,0 +1,42 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.py[cod]
+backend/**/*.py[cod]
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+
+# Python build artifacts
+backend/*.egg-info/
+backend/**/build/
+backend/**/dist/
+
+# Local storage / uploaded documents
+backend/storage/uploads/
+backend/storage/*.db
+backend/**/*.sqlite
+backend/**/*.sqlite3
+
+# Logs
+backend/**/*.log
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Safety backup - DO NOT submit
+backend_git_backup/
+frontend/*.tsbuildinfo
