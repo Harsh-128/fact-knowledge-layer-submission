@@ -511,7 +511,7 @@ The rest of the system was deliberately kept deterministic where possible, parti
 ## Additional Notes
 
 - The system was designed as a **general-purpose fact knowledge layer**, rather than a solution tailored to a specific company, document type, or fixed schema.
-- The pipeline is **LLM-provider flexible**. The extraction and comparison layers are isolated from the rest of the application, allowing the system to work with providers such as **OpenAI/ChatGPT APIs, Google Gemini APIs, or local Ollama models** without changing the core knowledge-layer architecture.
+- The LLM layer is designed to be provider-flexible. During development, Gemini API quota limitations led to using Ollama with `qwen3:8b` for the final working implementation.
 - During development, **Gemini API quota limitations** were encountered, so the system was tested using **Ollama with `qwen3:8b` locally**. This allowed development and testing to continue without depending on an external API.
 - The system is built around **evidence-first extraction**: facts are not treated as useful unless they can be traced back to source document evidence.
 - The implementation combines **LLM reasoning with deterministic validation**, rather than relying entirely on an LLM. This improves reliability for evidence validation, exact matches, structured output, and persistence.
