@@ -145,35 +145,6 @@ The demonstration covers:
 
 ---
 
-## Architecture
-
-The system follows an asynchronous, evidence-grounded fact knowledge pipeline.
-
-### High-Level Flow
-
-```text
-PDF Upload
-    ↓
-FastAPI API
-    ↓
-Celery + Redis
-    ↓
-PDF Parsing & Chunking
-    ↓
-LLM Fact Extraction
-    ↓
-Evidence Validation
-    ↓
-Entity Resolution
-    ↓
-Fact Clustering
-    ↓
-Fact Comparison
-    ↓
-PostgreSQL + pgvector
-    ↓
-React UI
-
 ## Required Demo Cases
 
 The system was evaluated against the four required reasoning and extraction cases.
