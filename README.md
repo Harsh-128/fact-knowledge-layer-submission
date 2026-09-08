@@ -123,7 +123,7 @@ http://localhost:5173
 
 ## Video Demo
 
-**Demo video:** PASTE_YOUR_VIDEO_LINK_HERE
+**Demo video:** https://youtu.be/CNV7ICs5Wns
 
 The demo is under 3 minutes and shows the application processing a PDF through the UI.
 
