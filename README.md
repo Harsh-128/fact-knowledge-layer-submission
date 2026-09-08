@@ -119,21 +119,23 @@ Open the URL shown by Vite, normally:
 http://localhost:5173
 ```
 
-Video Demo
+---
 
-Demo video: PASTE_YOUR_VIDEO_LINK_HERE
+## Video Demo
+
+**Demo video:** PASTE_YOUR_VIDEO_LINK_HERE
 
 The demo is under 3 minutes and shows the application processing a PDF through the UI.
 
 The demonstration covers:
 
-Uploading a PDF.
-Background processing.
-Extracted facts.
-Source evidence and page references.
-Fact exploration.
-Cross-document relationship analysis.
-Corroboration.
-Contradiction.
-Reconciliation by context.
-An extraction limitation discovered during testing.
+1. Uploading a PDF.
+2. Background processing.
+3. Extracted facts.
+4. Source evidence and page references.
+5. Fact exploration.
+6. Cross-document relationship analysis.
+7. Corroboration.
+8. Contradiction.
+9. Reconciliation by context.
+10. An extraction limitation discovered during testing.
