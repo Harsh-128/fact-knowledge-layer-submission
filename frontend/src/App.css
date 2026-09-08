@@ -593,6 +593,12 @@ select {
   gap: 24px;
 }
 
+.document-facts {
+  max-height: 650px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
 .document-evidence {
   align-self: start;
   padding: 20px;

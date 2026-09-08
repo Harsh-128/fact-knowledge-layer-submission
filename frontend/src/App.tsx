@@ -26,17 +26,21 @@ function App() {
 
   const [documentId, setDocumentId] = useState('');
 
-  const handleDocumentSelect = (id: string) => {
-    setDocumentId(id);
-    setActivePage('document');
-  };
+  const handleDocumentUploaded = (id: string) => {
+  setDocumentId(id);
+};
+
+const handleDocumentSelect = (id: string) => {
+  setDocumentId(id);
+  setActivePage('document');
+};
 
   const renderPage = () => {
     switch (activePage) {
       case 'upload':
         return (
           <UploadPage
-            onDocumentUploaded={handleDocumentSelect}
+            onDocumentUploaded={handleDocumentUploaded}
           />
         );
 
