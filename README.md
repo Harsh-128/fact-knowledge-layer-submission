@@ -63,7 +63,7 @@ source .venv/bin/activate
 Install the backend dependencies:
 
 ```bash
-pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
 
 ### 5. Run Database Migrations with Alembic
