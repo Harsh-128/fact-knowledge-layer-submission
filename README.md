@@ -4,6 +4,8 @@
 
 ### Prerequisites
 
+> **Note:** The commands below assume a Linux/Ubuntu environment.
+
 Make sure the following are installed:
 
 - Python 3.11+
