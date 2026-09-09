@@ -339,9 +339,9 @@ class LLMClient:
         response_model: type[T],
     ) -> T:
         """
-        Generate a structured response using OpenAI.
+        Generate a structured response using an OpenAI-compatible API.
 
-        OpenAI remains an optional provider.
+        Works with OpenRouter and other OpenAI-compatible providers.
         """
 
         try:
@@ -359,14 +359,16 @@ class LLMClient:
 
         if self._openai_client is None:
             self._openai_client = OpenAI(
-            api_key=self.api_key,
-            base_url=settings.openai_base_url,
-        )
+                api_key=self.api_key,
+                base_url=settings.openai_base_url,
+            )
+
+        schema = response_model.model_json_schema()
 
         try:
-            response = self._openai_client.responses.parse(
+            response = self._openai_client.chat.completions.create(
                 model=self.model,
-                input=[
+                messages=[
                     {
                         "role": "system",
                         "content": system_prompt,
@@ -376,7 +378,15 @@ class LLMClient:
                         "content": user_prompt,
                     },
                 ],
-                text_format=response_model,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": response_model.__name__,
+                        "strict": True,
+                        "schema": schema,
+                    },
+                },
+                temperature=0,
             )
 
         except Exception as exc:
@@ -384,22 +394,65 @@ class LLMClient:
                 f"OpenAI request failed: {exc}"
             ) from exc
 
-        parsed = self._extract_openai_parsed_response(response)
-
-        if parsed is None:
+        try:
+            content = response.choices[0].message.content
+        except (AttributeError, IndexError, TypeError) as exc:
             raise FactExtractionError(
-                "OpenAI returned no valid structured response."
+                f"OpenAI returned an invalid response structure: {exc}"
+            ) from exc
+
+        if not content:
+            raise FactExtractionError(
+                "OpenAI returned empty structured content."
             )
 
-        if isinstance(parsed, response_model):
-            return parsed
+        try:
+            parsed_json = json.loads(content)
+        except json.JSONDecodeError:
+            try:
+                repaired_content = repair_json(content)
+                parsed_json = json.loads(repaired_content)
+            except Exception as exc:
+                raise FactExtractionError(
+                    f"OpenAI returned invalid JSON: {exc}"
+                ) from exc
 
         try:
-            return response_model.model_validate(parsed)
-        except Exception as exc:
-            raise FactExtractionError(
-                f"OpenAI returned an invalid structured response: {exc}"
-            ) from exc
+            return response_model.model_validate(parsed_json)
+
+        except ValidationError as exc:
+            # Extraction responses get tolerant item-level validation.
+            if response_model.__name__ != "FactExtractionResponse":
+                raise FactExtractionError(
+                    f"OpenAI returned an invalid structured response: {exc}"
+                ) from exc
+
+            raw_facts = parsed_json.get("facts", [])
+
+            if not isinstance(raw_facts, list):
+                raise FactExtractionError(
+                    f"OpenAI returned invalid facts structure: {exc}"
+                ) from exc
+
+            valid_facts = []
+
+            for index, raw_fact in enumerate(raw_facts):
+                try:
+                    valid_facts.append(
+                        ExtractedFact.model_validate(raw_fact)
+                    )
+                except ValidationError as fact_error:
+                    print(
+                        f"Skipping malformed extracted fact "
+                        f"index={index}: {fact_error}"
+                    )
+
+            if not valid_facts:
+                raise FactExtractionError(
+                    f"OpenAI returned no valid facts: {exc}"
+                ) from exc
+
+            return response_model(facts=valid_facts)
 
     @staticmethod
     def _extract_openai_parsed_response(
