@@ -359,8 +359,9 @@ class LLMClient:
 
         if self._openai_client is None:
             self._openai_client = OpenAI(
-                api_key=self.api_key
-            )
+            api_key=self.api_key,
+            base_url=settings.openai_base_url,
+        )
 
         try:
             response = self._openai_client.responses.parse(

@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     # OpenAI - optional provider
     openai_api_key: str = Field(default="")
     openai_model: str = "gpt-4o-mini"
+    openai_base_url: str = "https://api.openai.com/v1"
 
     # Gemini - optional provider
     gemini_api_key: str = Field(default="")
