@@ -1175,25 +1175,59 @@ IMPORTANT:
                 ):
                     continue
 
+            # First try an exact match.
             quote_position = chunk.text.find(quoted_text)
 
-            if quote_position == -1:
-                continue
+            if quote_position != -1:
+                matched_text = quoted_text
+                match_start = quote_position
+                match_end = quote_position + len(quoted_text)
+
+            else:
+                # Fall back to whitespace-normalized matching.
+                # This handles PDF/LLM differences such as line breaks
+                # or multiple spaces while still requiring the text
+                # to exist in the actual source chunk.
+                normalized_quote = " ".join(quoted_text.split())
+
+                if not normalized_quote:
+                    continue
+
+                quote_pattern = re.escape(normalized_quote).replace(
+                    r"\ ",
+                    r"\s+",
+                )
+
+                match = re.search(
+                    quote_pattern,
+                    chunk.text,
+                )
+
+                if match is None:
+                    continue
+
+                match_start = match.start()
+                match_end = match.end()
+                matched_text = chunk.text[match_start:match_end]
 
             char_start = (
-                chunk.char_start + quote_position
+                chunk.char_start + match_start
                 if chunk.char_start is not None
-                else quote_position
+                else match_start
             )
 
-            char_end = char_start + len(quoted_text)
+            char_end = (
+                chunk.char_start + match_end
+                if chunk.char_start is not None
+                else match_end
+            )
 
             evidence_refs.append(
                 EvidenceRef(
                     document_id=document.id,
                     page_number=chunk.page_number,
                     chunk_id=chunk.id,
-                    quoted_text=quoted_text,
+                    quoted_text=matched_text,
                     char_start=char_start,
                     char_end=char_end,
                 )
