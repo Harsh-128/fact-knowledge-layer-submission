@@ -8,23 +8,27 @@
 
 Make sure the following are installed:
 
-- Python 3.11+
-- Node.js 18+
-- Docker and Docker Compose
-- Ollama
+* Python 3.11+
+* Node.js 18+
+* Docker and Docker Compose
+* Ollama
 
 The project uses FastAPI, PostgreSQL with pgvector, Redis, Celery, React/Vite, and Ollama.
 
-### 1. Clone the repository
+---
+
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/Harsh-128/fact-knowledge-layer-submission.git
 cd fact-knowledge-layer-submission
 ```
 
-### 2. Start PostgreSQL, pgvector and Redis
+---
 
-From the project root:
+### 2. Start PostgreSQL, pgvector, and Redis
+
+From the **project root**:
 
 ```bash
 docker compose up -d
@@ -40,7 +44,11 @@ docker compose ps
 
 Make sure PostgreSQL and Redis are running and healthy before continuing.
 
-### 3. Configure the backend
+---
+
+### 3. Configure the Backend
+
+From the project root:
 
 ```bash
 cd backend
@@ -49,11 +57,13 @@ cp .env.example .env
 
 Update `.env` with your local configuration if required.
 
-Do not commit `.env` or any credentials to the repository.
+> **Important:** Do not commit `.env` or any credentials to the repository.
 
-### 4. Create the Python environment
+---
 
-From the `backend` directory:
+### 4. Create the Python Environment
+
+Make sure you are inside the `backend` directory:
 
 ```bash
 python -m venv .venv
@@ -66,9 +76,13 @@ Install the backend dependencies:
 pip install -e ".[dev]"
 ```
 
+---
+
 ### 5. Run Database Migrations with Alembic
 
-Make sure PostgreSQL is running through Docker Compose, then apply the database migrations:
+Make sure PostgreSQL is running through Docker Compose.
+
+From the `backend` directory:
 
 ```bash
 alembic upgrade head
@@ -76,27 +90,39 @@ alembic upgrade head
 
 This creates and updates the database schema required by the application.
 
+---
+
 ### 6. Start Ollama
 
-The project uses Ollama for local LLM inference.
+The project uses Ollama for local LLM inference with `qwen3:8b`.
 
-Make sure Ollama is installed and pull the required model:
+Pull the required model:
 
 ```bash
 ollama pull qwen3:8b
 ```
 
-Verify the model is available:
+Verify that the model is available:
 
 ```bash
 ollama list
 ```
 
-Make sure Ollama is running before processing PDFs.
+Make sure the Ollama service is running before processing PDFs.
 
-### 7. Start the FastAPI backend
+If Ollama is not already running as a system service, start it in a separate terminal:
 
-From the `backend` directory:
+```bash
+ollama serve
+```
+
+> Keep this terminal running while using the application.
+
+---
+
+### 7. Start the FastAPI Backend
+
+Make sure you are inside the `backend` directory and that the virtual environment is activated:
 
 ```bash
 uvicorn app.main:app --reload
@@ -108,9 +134,19 @@ The API will normally be available at:
 http://localhost:8000
 ```
 
-### 8. Start the Celery worker
+API documentation is available at:
 
-Open another terminal:
+```text
+http://localhost:8000/docs
+```
+
+---
+
+### 8. Start the Celery Worker
+
+Open a **new terminal**.
+
+From the project root:
 
 ```bash
 cd fact-knowledge-layer-submission/backend
@@ -125,9 +161,15 @@ celery -A app.workers.celery_app:celery_app worker --loglevel=info
 
 The worker processes document ingestion, fact extraction, and fact comparison asynchronously.
 
-### 9. Start the frontend
+> Keep the Celery worker terminal running while using the application.
 
-Open another terminal:
+---
+
+### 9. Start the Frontend
+
+Open another **new terminal**.
+
+From the project root:
 
 ```bash
 cd fact-knowledge-layer-submission/frontend
@@ -141,6 +183,25 @@ Open the URL shown by Vite, normally:
 http://localhost:5173
 ```
 
+---
+
+## Running the Full Application
+
+You should have the following services running:
+
+| Service               | Command                                                              | Purpose                     |
+| --------------------- | -------------------------------------------------------------------- | --------------------------- |
+| PostgreSQL + pgvector | `docker compose up -d`                                               | Database and vector storage |
+| Redis                 | `docker compose up -d`                                               | Celery message broker       |
+| Ollama                | `ollama serve`                                                       | Local LLM inference         |
+| FastAPI               | `uvicorn app.main:app --reload`                                      | Backend API                 |
+| Celery                | `celery -A app.workers.celery_app:celery_app worker --loglevel=info` | Background processing       |
+| Vite                  | `npm run dev`                                                        | Frontend                    |
+
+Once all services are running, open:
+
+```text
+http://localhost:5173
 ```
 
 ---
@@ -150,6 +211,7 @@ http://localhost:5173
 **Demo video:** https://youtu.be/CNV7ICs5Wns
 
 The demo is under 3 minutes and shows the application processing a PDF through the UI.
+
 ### Demo Preview
 
 ![Fact Knowledge Layer Demo](docs/demo.gif)
@@ -175,80 +237,82 @@ The system was evaluated against the four required reasoning and extraction case
 
 ### Case 1 — Corroborated Fact
 
-**Scenario:**  
+**Scenario:**
 The same underlying fact appears across multiple documents, potentially using different wording, units, or presentation formats.
 
-**Example:**  
+**Example:**
 The system identifies matching facts referring to the same entity and attribute across documents and creates a `CORROBORATES` relationship.
 
 **System reasoning:**
-- Resolve the extracted facts to the same entity.
-- Compare the attribute and value.
-- Consider units and temporal/contextual scope.
-- If the values represent the same underlying fact, classify the relationship as `CORROBORATES`.
 
-**Evidence shown:**  
+* Resolve the extracted facts to the same entity.
+* Compare the attribute and value.
+* Consider units and temporal/contextual scope.
+* If the values represent the same underlying fact, classify the relationship as `CORROBORATES`.
+
+**Evidence shown:**
 Each fact retains its source document, page, chunk, and exact supporting text.
 
 ---
 
 ### Case 2 — Genuine Contradiction
 
-**Scenario:**  
+**Scenario:**
 Two documents report different values for the same entity and attribute under the same relevant context.
 
-**Example:**  
+**Example:**
 One source reports revenue as **INR 100 crore**, while another reports **INR 200 crore** for the same scope.
 
-**System reasoning:**  
+**System reasoning:**
 After entity and attribute matching, the comparison layer determines that the values cannot represent the same numerical fact and creates a `CONTRADICTS` relationship.
 
-**Evidence shown:**  
+**Evidence shown:**
 Both conflicting facts retain their independent source evidence and page references.
 
 ---
 
 ### Case 3 — Apparent Contradiction Explained by Context
 
-**Scenario:**  
+**Scenario:**
 Two values initially appear contradictory but become consistent after considering units, time period, or scope.
 
-**Example:**  
+**Example:**
 A value of **INR 100 crore** and **INR 1000 million** represent the same amount after unit normalization.
 
 **System reasoning:**
-- Match the facts to the same entity and attribute.
-- Compare numerical values after considering their units.
-- Examine temporal and contextual scope.
-- Determine that the apparent difference is explainable rather than a genuine contradiction.
+
+* Match the facts to the same entity and attribute.
+* Compare numerical values after considering their units.
+* Examine temporal and contextual scope.
+* Determine that the apparent difference is explainable rather than a genuine contradiction.
 
 The system therefore creates a `RECONCILES` relationship instead of marking the facts as contradictory.
 
-**Evidence shown:**  
+**Evidence shown:**
 The relationship retains links to both source facts and their supporting evidence.
 
 ---
 
 ### Case 4 — Extraction / Reasoning Failure
 
-**Scenario:**  
+**Scenario:**
 During testing with a previously unseen PDF, the extraction pipeline encountered a table whose numerical columns were not reliably associated with the corresponding rows.
 
-**Observed issue:**  
+**Observed issue:**
 The system was able to extract meaningful text values from the table, but the table structure was not sufficiently preserved to guarantee that each numerical value was mapped to the correct row/column.
 
-**How it was handled:**  
+**How it was handled:**
 The pipeline validates extracted evidence against the original chunk text and retains confidence and review metadata. However, this particular example was not automatically flagged for review, demonstrating a limitation in the current extraction approach.
 
 **Planned improvement:**
 
-- Add table-aware PDF parsing.
-- Preserve row/column relationships explicitly.
-- Validate numerical values against table headers.
-- Add stronger confidence checks for ambiguous table extraction.
-- Route uncertain table facts to `needs_review` for future human review.
+* Add table-aware PDF parsing.
+* Preserve row/column relationships explicitly.
+* Validate numerical values against table headers.
+* Add stronger confidence checks for ambiguous table extraction.
+* Route uncertain table facts to `needs_review` for future human review.
 
-  ---
+---
 
 ## Approach
 
@@ -261,11 +325,12 @@ The system is implemented as an asynchronous fact knowledge pipeline:
 The backend is built with **FastAPI**, with **Celery + Redis** used for background processing. **PostgreSQL + pgvector** is used for persistence and similarity-based operations. **Ollama** is used to run the local `qwen3:8b` model for fact extraction and comparison.
 
 The frontend is implemented with React and provides views for:
-- PDF upload and processing status.
-- Extracted facts.
-- Source evidence.
-- Fact filtering and exploration.
-- Cross-document relationships.
+
+* PDF upload and processing status.
+* Extracted facts.
+* Source evidence.
+* Fact filtering and exploration.
+* Cross-document relationships.
 
 ---
 
@@ -274,14 +339,15 @@ The frontend is implemented with React and provides views for:
 The PDF is first parsed into pages and chunks. The chunks are then sent to the LLM with instructions to extract meaningful facts rather than simply summarizing the document.
 
 Facts are represented using a flexible structure containing information such as:
-- Entity
-- Attribute / fact type
-- Value
-- Unit
-- Temporal scope
-- Confidence
-- Source evidence
-- Review status
+
+* Entity
+* Attribute / fact type
+* Value
+* Unit
+* Temporal scope
+* Confidence
+* Source evidence
+* Review status
 
 The fact representation uses JSON/JSONB-style structures so that the system is not tied to one fixed document schema.
 
@@ -294,10 +360,11 @@ This was important because the input PDFs can belong to different domains and ca
 A major design requirement was that extracted facts must be traceable back to the source document.
 
 The extraction prompt requires the model to return:
-- Source page
-- Source chunk
-- Exact supporting quote
-- Evidence confidence
+
+* Source page
+* Source chunk
+* Exact supporting quote
+* Evidence confidence
 
 The backend then validates the returned evidence against the actual chunk text.
 
@@ -329,9 +396,9 @@ After facts are grouped by entity and attribute, the comparison service determin
 
 The system supports three important relationship types:
 
-- `CORROBORATES` — facts support the same underlying information.
-- `CONTRADICTS` — facts represent conflicting information.
-- `RECONCILES` — values initially appear different but can be explained by context such as units, time periods, or scope.
+* `CORROBORATES` — facts support the same underlying information.
+* `CONTRADICTS` — facts represent conflicting information.
+* `RECONCILES` — values initially appear different but can be explained by context such as units, time periods, or scope.
 
 The comparison considers numerical values, units, temporal scope, and other available context.
 
@@ -350,16 +417,18 @@ A deterministic exact-match path is also used for clearly identical facts, avoid
 I used a hybrid approach rather than relying entirely on the LLM.
 
 Deterministic logic is used where the answer is unambiguous, such as:
-- Evidence validation.
-- Exact duplicate fact comparison.
-- Structural validation.
-- Persistence and relationship creation.
+
+* Evidence validation.
+* Exact duplicate fact comparison.
+* Structural validation.
+* Persistence and relationship creation.
 
 The LLM is used where semantic reasoning is required, such as:
-- Extracting facts from heterogeneous documents.
-- Understanding different wording.
-- Comparing facts using context.
-- Explaining why two values contradict or reconcile.
+
+* Extracting facts from heterogeneous documents.
+* Understanding different wording.
+* Comparing facts using context.
+* Explaining why two values contradict or reconcile.
 
 This reduces unnecessary model calls while still allowing semantic reasoning where rules alone would be too rigid.
 
@@ -372,11 +441,12 @@ PDF processing and LLM inference can take significant time, especially for large
 Instead of keeping the upload request open while the entire pipeline executes, the API creates a background job using Celery and Redis.
 
 The frontend can then poll the job status and display:
-- Processing state.
-- Page/chunk counts.
-- Extracted fact counts.
-- Review counts.
-- Processing completion.
+
+* Processing state.
+* Page/chunk counts.
+* Extracted fact counts.
+* Review counts.
+* Processing completion.
 
 This also makes the architecture easier to extend to larger PDFs and multiple documents.
 
@@ -437,11 +507,12 @@ The system therefore stores temporal scope and provides contextual reasoning to 
 I intentionally avoided hardcoding company names, PDF filenames, fixed schemas, or document-specific extraction rules.
 
 The system instead uses:
-- Dynamic fact attributes.
-- Flexible JSON/JSONB values.
-- LLM-based extraction.
-- Entity resolution.
-- Context-aware comparison.
+
+* Dynamic fact attributes.
+* Flexible JSON/JSONB values.
+* LLM-based extraction.
+* Entity resolution.
+* Context-aware comparison.
 
 This makes the pipeline more suitable for unseen PDFs, although it also means extraction quality depends partly on the quality of the PDF parser and LLM.
 
@@ -472,11 +543,12 @@ A fully deterministic comparison engine would be difficult to generalize across 
 The main AI component is **Ollama running `qwen3:8b` locally**.
 
 The model was used for:
-- Fact extraction from PDF chunks.
-- Semantic interpretation of extracted information.
-- Cross-document fact comparison.
-- Contradiction/reconciliation reasoning.
-- Generating relationship explanations.
+
+* Fact extraction from PDF chunks.
+* Semantic interpretation of extracted information.
+* Cross-document fact comparison.
+* Contradiction/reconciliation reasoning.
+* Generating relationship explanations.
 
 The rest of the system was deliberately kept deterministic where possible, particularly for evidence validation, data validation, persistence, and exact fact matching.
 
@@ -486,30 +558,30 @@ The rest of the system was deliberately kept deterministic where possible, parti
 
 ### Current Limitations
 
-- **Table extraction:** Complex PDF tables can lose row/column relationships during parsing. This was observed while testing an unseen stock-report PDF.
-- **LLM processing speed:** Local Ollama inference with `qwen3:8b` can be slow for large PDFs or many chunks.
-- **Extraction reliability:** LLM output can sometimes be incomplete or malformed. Response validation and fallback handling are implemented, but difficult documents can still produce imperfect facts.
-- **Temporal reasoning:** Comparing facts across different quarters, years, or reporting periods can require deeper context.
-- **Human review:** The system has confidence and `needs_review` metadata, but does not yet provide a complete manual review workflow.
+* **Table extraction:** Complex PDF tables can lose row/column relationships during parsing. This was observed while testing an unseen stock-report PDF.
+* **LLM processing speed:** Local Ollama inference with `qwen3:8b` can be slow for large PDFs or many chunks.
+* **Extraction reliability:** LLM output can sometimes be incomplete or malformed. Response validation and fallback handling are implemented, but difficult documents can still produce imperfect facts.
+* **Temporal reasoning:** Comparing facts across different quarters, years, or reporting periods can require deeper context.
+* **Human review:** The system has confidence and `needs_review` metadata, but does not yet provide a complete manual review workflow.
 
 ### Next Steps
 
-- Add **table-aware PDF parsing** to preserve rows, columns, and headers.
-- Improve **fact and evidence validation**, especially for numerical values and units.
-- Strengthen **temporal reasoning and entity resolution** for more reliable cross-document comparisons.
-- Add a **human-in-the-loop review interface** for uncertain facts and relationships.
-- Improve **parallel processing and batching** for larger document collections.
-- Build a labeled evaluation dataset to measure extraction, grounding, and relationship accuracy.
+* Add **table-aware PDF parsing** to preserve rows, columns, and headers.
+* Improve **fact and evidence validation**, especially for numerical values and units.
+* Strengthen **temporal reasoning and entity resolution** for more reliable cross-document comparisons.
+* Add a **human-in-the-loop review interface** for uncertain facts and relationships.
+* Improve **parallel processing and batching** for larger document collections.
+* Build a labeled evaluation dataset to measure extraction, grounding, and relationship accuracy.
 
-  ---
+---
 
 ## Additional Notes
 
-- The system was designed as a **general-purpose fact knowledge layer**, rather than a solution tailored to a specific company, document type, or fixed schema.
-- The LLM layer is designed to be provider-flexible. During development, Gemini API quota limitations led to using Ollama with `qwen3:8b` for the final working implementation.
-- During development, **Gemini API quota limitations** were encountered, so the system was tested using **Ollama with `qwen3:8b` locally**. This allowed development and testing to continue without depending on an external API.
-- The system is built around **evidence-first extraction**: facts are not treated as useful unless they can be traced back to source document evidence.
-- The implementation combines **LLM reasoning with deterministic validation**, rather than relying entirely on an LLM. This improves reliability for evidence validation, exact matches, structured output, and persistence.
-- The application supports **asynchronous PDF processing**, making it suitable for extending to larger documents and multiple-document knowledge bases.
-- Testing with additional unseen PDFs was used to identify real extraction limitations, particularly around complex tables, rather than adding document-specific rules to make individual examples pass.
-- The project prioritizes **generalization, traceability, and explainable cross-document reasoning** so that users can understand not only the extracted fact, but also where it came from and why relationships between facts were created.
+* The system was designed as a **general-purpose fact knowledge layer**, rather than a solution tailored to a specific company, document type, or fixed schema.
+* The LLM layer is designed to be provider-flexible. During development, Gemini API quota limitations led to using Ollama with `qwen3:8b` for the final working implementation.
+* During development, **Gemini API quota limitations** were encountered, so the system was tested using **Ollama with `qwen3:8b` locally**. This allowed development and testing to continue without depending on an external API.
+* The system is built around **evidence-first extraction**: facts are not treated as useful unless they can be traced back to source document evidence.
+* The implementation combines **LLM reasoning with deterministic validation**, rather than relying entirely on an LLM. This improves reliability for evidence validation, exact matches, structured output, and persistence.
+* The application supports **asynchronous PDF processing**, making it suitable for extending to larger documents and multiple-document knowledge bases.
+* Testing with additional unseen PDFs was used to identify real extraction limitations, particularly around complex tables, rather than adding document-specific rules to make individual examples pass.
+* The project prioritizes **generalization, traceability, and explainable cross-document reasoning** so that users can understand not only the extracted fact, but also where it came from and why relationships between facts were created.
