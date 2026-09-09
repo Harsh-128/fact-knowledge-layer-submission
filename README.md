@@ -22,7 +22,7 @@ git clone https://github.com/Harsh-128/fact-knowledge-layer-submission.git
 cd fact-knowledge-layer-submission
 ```
 
-### 2. Start PostgreSQL and Redis
+### 2. Start PostgreSQL, pgvector and Redis
 
 From the project root:
 
@@ -30,13 +30,15 @@ From the project root:
 docker compose up -d
 ```
 
+The PostgreSQL container uses the `pgvector/pgvector` image, so pgvector is available automatically with PostgreSQL.
+
 Check the services:
 
 ```bash
 docker compose ps
 ```
 
-Make sure PostgreSQL and Redis are running before continuing.
+Make sure PostgreSQL and Redis are running and healthy before continuing.
 
 ### 3. Configure the backend
 
@@ -46,6 +48,7 @@ cp .env.example .env
 ```
 
 Update `.env` with your local configuration if required.
+
 Do not commit `.env` or any credentials to the repository.
 
 ### 4. Create the Python environment
@@ -63,18 +66,35 @@ Install the backend dependencies:
 pip install -r requirements.txt
 ```
 
-### 5. Start Ollama
+### 5. Run Database Migrations with Alembic
+
+Make sure PostgreSQL is running through Docker Compose, then apply the database migrations:
+
+```bash
+alembic upgrade head
+```
+
+This creates and updates the database schema required by the application.
+
+### 6. Start Ollama
 
 The project uses Ollama for local LLM inference.
+
 Make sure Ollama is installed and pull the required model:
 
 ```bash
 ollama pull qwen3:8b
 ```
 
+Verify the model is available:
+
+```bash
+ollama list
+```
+
 Make sure Ollama is running before processing PDFs.
 
-### 6. Start the FastAPI backend
+### 7. Start the FastAPI backend
 
 From the `backend` directory:
 
@@ -84,16 +104,16 @@ uvicorn app.main:app --reload
 
 The API will normally be available at:
 
-```
+```text
 http://localhost:8000
 ```
 
-### 7. Start the Celery worker
+### 8. Start the Celery worker
 
 Open another terminal:
 
 ```bash
-cd ~/Projects/fact-knowledge-layer/backend
+cd fact-knowledge-layer-submission/backend
 source .venv/bin/activate
 ```
 
@@ -105,20 +125,22 @@ celery -A app.workers.celery_app:celery_app worker --loglevel=info
 
 The worker processes document ingestion, fact extraction, and fact comparison asynchronously.
 
-### 8. Start the frontend
+### 9. Start the frontend
 
 Open another terminal:
 
 ```bash
-cd ~/Projects/fact-knowledge-layer/frontend
+cd fact-knowledge-layer-submission/frontend
 npm install
 npm run dev
 ```
 
 Open the URL shown by Vite, normally:
 
-```
+```text
 http://localhost:5173
+```
+
 ```
 
 ---
