@@ -52,6 +52,29 @@ def list_documents(
     ]
 
 
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    document_id: str,
+    db: Session = Depends(get_database),
+) -> None:
+    """
+    Delete a document and all its facts, chunks, and relationships.
+    Cascades via FK constraints defined in the DB schema.
+    """
+
+    repository = DocumentRepository(db)
+    document = repository.get_by_id(document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {document_id}",
+        )
+
+    repository.delete(document_id)
+    db.commit()
+
+
 @router.get("/{document_id}/status")
 def get_document_status(
     document_id: str,

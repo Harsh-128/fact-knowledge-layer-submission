@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import {
   Document,
   Fact,
+  deleteDocument,
   getDocuments,
   getFacts,
 } from '../api/client';
@@ -12,7 +13,7 @@ import EvidenceHighlighter from '../components/EvidenceHighlighter';
 interface DocumentViewProps {
   documentId?: string;
   documentFilename?: string;
-  onDocumentSelect: (id: string) => void;
+  onDocumentSelect: (id: string, filename?: string) => void;
 }
 
 function DocumentView({
@@ -26,6 +27,20 @@ function DocumentView({
   const [error, setError] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async (docId: string) => {
+    if (!window.confirm('Delete this document and all its facts? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await deleteDocument(docId);
+      onDocumentSelect(''); // go back to list
+    } catch {
+      setError('Failed to delete document.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
   if (documentId) {
@@ -127,18 +142,27 @@ function DocumentView({
           <h3>Processed Documents</h3>
 
           {documents.map((document) => (
-            <button
-              key={document.id}
-              type="button"
-              className="document-selector-item"
-              onClick={() => onDocumentSelect(document.id, document.filename)}
-            >
-              <strong>{document.filename}</strong>
-
-              <span>
-                {document.status} · {document.page_count ?? 0} pages
-              </span>
-            </button>
+            <div key={document.id} className="document-selector-row">
+              <button
+                type="button"
+                className="document-selector-item"
+                onClick={() => onDocumentSelect(document.id, document.filename)}
+              >
+                <strong>{document.filename}</strong>
+                <span>
+                  {document.status} · {document.page_count ?? 0} pages
+                </span>
+              </button>
+              <button
+                type="button"
+                className="delete-btn"
+                title="Delete document"
+                onClick={() => handleDelete(document.id)}
+                disabled={deleting}
+              >
+                🗑️
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -166,7 +190,18 @@ function DocumentView({
           >
             ← Back to documents
           </button>
-          <strong>{documentFilename || documentId}</strong>
+          <div className="document-id-row">
+            <strong>{documentFilename || documentId}</strong>
+            <button
+              type="button"
+              className="delete-btn"
+              title="Delete this document"
+              onClick={() => handleDelete(documentId)}
+              disabled={deleting}
+            >
+              🗑️ Delete
+            </button>
+          </div>
         </div>
       </div>
 

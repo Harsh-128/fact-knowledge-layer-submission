@@ -239,3 +239,45 @@ export async function rerunComparisons(
   );
   return response.data;
 }
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  await apiClient.delete(`/documents/${encodeURIComponent(documentId)}`);
+}
+
+export function exportFactsAsCsv(facts: Fact[]): void {
+  const headers = [
+    'id', 'document_id', 'entity_id', 'attribute',
+    'value', 'unit', 'confidence', 'needs_review',
+    'temporal_scope', 'evidence_quote', 'evidence_page',
+  ];
+
+  const rows = facts.map((f) => [
+    f.id,
+    f.document_id,
+    f.entity_id,
+    f.attribute,
+    String(f.value),
+    f.unit ?? '',
+    f.confidence,
+    f.needs_review,
+    f.temporal_scope
+      ? ((f.temporal_scope as Record<string, unknown>).period_label ?? '')
+      : '',
+    f.evidence[0]?.quoted_text ?? '',
+    f.evidence[0]?.page_number ?? '',
+  ]);
+
+  const csv = [headers, ...rows]
+    .map((row) =>
+      row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','),
+    )
+    .join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'facts.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}

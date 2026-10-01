@@ -15,6 +15,7 @@ function RelationshipGraph() {
   const [facts, setFacts] = useState<Record<string, Fact>>({});
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDocumentId, setSelectedDocumentId] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -87,7 +88,7 @@ function RelationshipGraph() {
         </p>
       </div>
 
-      {/* Document filter */}
+      {/* Document filter + type filter */}
       <div className="fact-filters">
         <div className="filter-field">
           <label htmlFor="doc-filter">Filter by document</label>
@@ -102,6 +103,19 @@ function RelationshipGraph() {
                 {doc.filename.replace(/^document:[a-f0-9]+_/, '')}
               </option>
             ))}
+          </select>
+        </div>
+        <div className="filter-field">
+          <label htmlFor="type-filter">Filter by type</label>
+          <select
+            id="type-filter"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+          >
+            <option value="">All types</option>
+            <option value="corroborates">Corroborates</option>
+            <option value="contradicts">Contradicts</option>
+            <option value="reconciles">Reconciles</option>
           </select>
         </div>
       </div>
@@ -166,7 +180,11 @@ function RelationshipGraph() {
 
       {!loading && relationships.length > 0 && (
         <div className="relationship-list">
-          {relationships.map((relationship) => {
+          {relationships
+            .filter((r) =>
+              typeFilter ? r.relationship_type.toLowerCase() === typeFilter : true,
+            )
+            .map((relationship) => {
             const sourceFact = facts[relationship.source_fact_id];
             const targetFact = facts[relationship.target_fact_id];
 

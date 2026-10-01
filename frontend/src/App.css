@@ -1402,3 +1402,55 @@ select {
 .status-rerun {
   margin-top: 10px;
 }
+
+/* ── Pagination ────────────────────────────────────── */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px 0 8px;
+}
+
+.pagination span {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+/* ── Delete button ─────────────────────────────────── */
+.delete-btn {
+  background: none;
+  border: 1px solid #fca5a5;
+  color: #ef4444;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.delete-btn:hover:not(:disabled) {
+  background: #fee2e2;
+}
+
+.delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.document-selector-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.document-selector-row .document-selector-item {
+  flex: 1;
+}
+
+.document-id-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
