@@ -7,6 +7,7 @@ from app.api.v1.routes_relationships import router as relationships_router
 from app.api.v1.routes_schema import router as schema_router  # C-3: was never registered
 from app.api.v1.routes_compare import router as compare_router
 from app.api.v1.routes_entities import router as entities_router
+from app.api.v1.routes_analytics import router as analytics_router
 from app.config import settings
 from app.core.logging import setup_logging
 
@@ -80,5 +81,10 @@ app.include_router(
 
 app.include_router(
     entities_router,
+    prefix=settings.api_v1_prefix,
+)
+
+app.include_router(
+    analytics_router,
     prefix=settings.api_v1_prefix,
 )

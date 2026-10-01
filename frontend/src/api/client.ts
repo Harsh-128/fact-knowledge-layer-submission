@@ -320,3 +320,24 @@ export async function getEntity(entityId: string): Promise<EntityDetail> {
   );
   return response.data;
 }
+
+export interface AnalyticsSummary {
+  totals: {
+    documents: number;
+    facts: number;
+    entities: number;
+    relationships: number;
+    needs_review: number;
+  };
+  facts_per_document: { document_id: string; filename: string; fact_count: number }[];
+  relationship_breakdown: { type: string; count: number }[];
+  confidence_distribution: { label: string; count: number }[];
+  top_attributes: { attribute: string; count: number }[];
+  top_entities: { entity_id: string; canonical_name: string; entity_type: string; count: number }[];
+  entity_type_breakdown: { type: string; count: number }[];
+}
+
+export async function getAnalytics(): Promise<AnalyticsSummary> {
+  const response = await apiClient.get<AnalyticsSummary>('/analytics/summary');
+  return response.data;
+}

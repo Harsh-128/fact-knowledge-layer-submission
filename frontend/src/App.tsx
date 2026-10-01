@@ -8,6 +8,7 @@ import ComparePage from './pages/ComparePage';
 import StatusDashboard from './pages/StatusDashboard';
 import ReviewQueue from './pages/ReviewQueue';
 import EntityExplorer from './pages/EntityExplorer';
+import AnalyticsPage from './pages/AnalyticsPage';
 
 import './App.css';
 
@@ -19,11 +20,13 @@ type Page =
   | 'compare'
   | 'status'
   | 'review'
-  | 'entities';
+  | 'entities'
+  | 'analytics';
 
 const navigation: { id: Page; label: string }[] = [
   { id: 'upload', label: 'Upload' },
   { id: 'status', label: '📊 Status' },
+  { id: 'analytics', label: '📈 Analytics' },
   { id: 'facts', label: 'Fact Explorer' },
   { id: 'entities', label: '🏢 Entities' },
   { id: 'review', label: '🔍 Review' },
@@ -89,6 +92,9 @@ function App() {
 
       case 'entities':
         return <EntityExplorer />;
+
+      case 'analytics':
+        return <AnalyticsPage />;
 
       default:
         return <UploadPage />;
