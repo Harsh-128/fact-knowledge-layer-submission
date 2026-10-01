@@ -281,3 +281,42 @@ export function exportFactsAsCsv(facts: Fact[]): void {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export interface EntitySummary {
+  id: string;
+  canonical_name: string;
+  entity_type: string;
+  aliases: string[];
+  confidence: number;
+  fact_count: number;
+  document_ids: string[];
+}
+
+export interface EntityDetail extends EntitySummary {
+  attributes: Record<string, {
+    id: string;
+    value: unknown;
+    unit: string | null;
+    confidence: number;
+    document_id: string;
+    temporal_scope: Record<string, unknown> | null;
+    needs_review: boolean;
+  }[]>;
+}
+
+export async function getEntities(params?: {
+  search?: string;
+  entity_type?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ items: EntitySummary[]; total: number }> {
+  const response = await apiClient.get('/entities', { params });
+  return response.data;
+}
+
+export async function getEntity(entityId: string): Promise<EntityDetail> {
+  const response = await apiClient.get<EntityDetail>(
+    `/entities/${encodeURIComponent(entityId)}`,
+  );
+  return response.data;
+}

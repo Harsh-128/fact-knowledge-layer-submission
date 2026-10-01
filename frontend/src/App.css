@@ -1454,3 +1454,230 @@ select {
   align-items: center;
   gap: 12px;
 }
+
+/* ── Entity Explorer ───────────────────────────────── */
+.entity-explorer-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .entity-explorer-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.entity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.entity-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  width: 100%;
+}
+
+.entity-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59,130,246,0.1);
+}
+
+.entity-card--selected {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.entity-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.entity-name {
+  font-size: 0.9rem;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.entity-type-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  text-transform: capitalize;
+}
+
+.entity-card-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+/* Detail panel */
+.entity-detail {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 24px;
+  min-height: 300px;
+}
+
+.entity-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.entity-detail-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.entity-detail-meta {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.entity-detail-meta > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.entity-detail-meta dt {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.entity-detail-meta dd {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.entity-aliases {
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+
+.entity-alias-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.entity-alias-tag {
+  background: #f3f4f6;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  color: #374151;
+}
+
+.entity-docs {
+  margin-bottom: 20px;
+  font-size: 0.85rem;
+}
+
+.entity-docs ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.entity-attributes h4 {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  color: #374151;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 16px;
+}
+
+.entity-attribute-group {
+  margin-bottom: 16px;
+}
+
+.entity-attribute-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #3b82f6;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.entity-attribute-count {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: #9ca3af;
+}
+
+.entity-fact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  background: #f9fafb;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+}
+
+.entity-fact-value {
+  font-weight: 600;
+  color: #111827;
+}
+
+.entity-fact-confidence {
+  color: #10b981;
+  font-size: 0.7rem;
+}
+
+.entity-fact-doc {
+  color: #9ca3af;
+  font-size: 0.7rem;
+  flex: 1;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.entity-fact-period {
+  background: #ede9fe;
+  color: #7c3aed;
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.entity-fact-review {
+  font-size: 0.75rem;
+  title: "Needs review";
+}
