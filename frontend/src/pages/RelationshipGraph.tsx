@@ -31,7 +31,7 @@ function RelationshipGraph() {
       try {
         const relationshipResult = await getRelationships({
           document_id: selectedDocumentId || undefined,
-          limit: 100,
+          limit: 500,
           offset: 0,
         });
 

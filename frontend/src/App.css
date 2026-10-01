@@ -1388,3 +1388,17 @@ select {
 .review-btn--reject:hover:not(:disabled) {
   background: #fecaca;
 }
+
+.page-success {
+  background: #d1fae5;
+  border: 1px solid #6ee7b7;
+  color: #065f46;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.status-rerun {
+  margin-top: 10px;
+}

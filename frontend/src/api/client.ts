@@ -230,3 +230,12 @@ export async function reviewFact(
   );
   return response.data;
 }
+
+export async function rerunComparisons(
+  documentId: string,
+): Promise<{ document_id: string; tasks_dispatched: number; message: string }> {
+  const response = await apiClient.post(
+    `/documents/${encodeURIComponent(documentId)}/rerun-comparisons`,
+  );
+  return response.data;
+}

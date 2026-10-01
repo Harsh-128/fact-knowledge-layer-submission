@@ -11,6 +11,7 @@ from app.api.v1.deps import get_database, require_api_key
 from app.config import settings
 from app.infra.db.models_orm import ChunkORM, FactORM
 from app.infra.db.repositories.document_repo import DocumentRepository
+from app.infra.db.repositories.fact_repo import FactRepository
 from app.workers.tasks_ingestion import ingest_document_task
 
 
@@ -96,6 +97,56 @@ def get_document_status(
         "created_at": document.created_at,
         "processed_at": document.processed_at,
         "error_message": document.error_message,
+    }
+
+
+@router.post("/{document_id}/rerun-comparisons")
+def rerun_comparisons(
+    document_id: str,
+    db: Session = Depends(get_database),
+) -> dict:
+    """
+    Re-dispatch comparison tasks for all facts in a document.
+
+    Useful when comparison tasks failed silently (e.g. due to Gemini
+    503 errors during initial processing).
+    """
+
+    repository = DocumentRepository(db)
+    document = repository.get_by_id(document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {document_id}",
+        )
+
+    fact_repo = FactRepository(db)
+    facts = fact_repo.get_by_document(document_id)
+
+    if not facts:
+        return {
+            "document_id": document_id,
+            "tasks_dispatched": 0,
+            "message": "No facts found for this document.",
+        }
+
+    from app.workers.tasks_comparison import compare_facts_task
+
+    seen_pairs: set[tuple[str, str]] = set()
+    dispatched = 0
+
+    for fact in facts:
+        pair = (fact.entity_id, fact.attribute)
+        if pair not in seen_pairs:
+            seen_pairs.add(pair)
+            compare_facts_task.delay(fact.entity_id, fact.attribute)
+            dispatched += 1
+
+    return {
+        "document_id": document_id,
+        "tasks_dispatched": dispatched,
+        "message": f"Re-dispatched {dispatched} comparison task(s).",
     }
 
 

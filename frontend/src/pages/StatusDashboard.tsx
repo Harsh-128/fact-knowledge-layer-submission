@@ -5,6 +5,7 @@ import {
   DocumentStatus,
   getDocumentStatus,
   getDocuments,
+  rerunComparisons,
 } from '../api/client';
 
 // Poll every 3 seconds for documents that are still processing.
@@ -39,9 +40,11 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
 function DocumentCard({
   doc,
   statusData,
+  onRerun,
 }: {
   doc: Document;
   statusData: DocumentStatus | null;
+  onRerun: (id: string) => void;
 }) {
   const statusKey = statusData?.status ?? doc.status;
   const label = STATUS_LABELS[statusKey] ?? statusKey;
@@ -104,6 +107,19 @@ function DocumentCard({
             </div>
           )}
 
+          {statusKey === 'processed' && statusData && statusData.fact_count > 0 && (
+            <div className="status-rerun">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => onRerun(doc.id)}
+                title="Re-dispatch comparison tasks for this document"
+              >
+                🔄 Re-run comparisons
+              </button>
+            </div>
+          )}
+
           {statusKey === 'failed' && statusData.error_message && (
             <div className="status-error">
               {statusData.error_message}
@@ -120,6 +136,7 @@ function StatusDashboard() {
   const [statusMap, setStatusMap] = useState<Record<string, DocumentStatus>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [rerunMsg, setRerunMsg] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadDocuments = useCallback(async () => {
@@ -177,6 +194,17 @@ function StatusDashboard() {
     };
   }, [loadDocuments, refreshStatuses]);
 
+  const handleRerun = async (documentId: string) => {
+    try {
+      const result = await rerunComparisons(documentId);
+      setRerunMsg(`✅ ${result.message}`);
+      setTimeout(() => setRerunMsg(''), 5000);
+    } catch {
+      setRerunMsg('❌ Failed to re-run comparisons.');
+      setTimeout(() => setRerunMsg(''), 5000);
+    }
+  };
+
   const totalFacts = Object.values(statusMap).reduce(
     (sum, s) => sum + s.fact_count,
     0,
@@ -227,6 +255,7 @@ function StatusDashboard() {
       </div>
 
       {error && <div className="page-message page-error">{error}</div>}
+      {rerunMsg && <div className="page-message page-success">{rerunMsg}</div>}
 
       {loading ? (
         <div className="empty-state">Loading documents…</div>
@@ -241,6 +270,7 @@ function StatusDashboard() {
               key={doc.id}
               doc={doc}
               statusData={statusMap[doc.id] ?? null}
+              onRerun={handleRerun}
             />
           ))}
         </div>
