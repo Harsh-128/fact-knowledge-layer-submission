@@ -51,7 +51,7 @@ class Settings(BaseSettings):
 
     # Gemini - optional provider
     gemini_api_key: str = Field(default="")
-    gemini_model: str = "gemini-2.0-flash"  # H-4: was "gemini-3.6-flash" (non-existent)
+    gemini_model: str = "gemini-3.8-flash"
 
     # File storage
     upload_dir: str = "./storage/uploads"

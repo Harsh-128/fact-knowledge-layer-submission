@@ -37,7 +37,8 @@ def list_documents(
     return [
         {
             "id": document.id,
-            "filename": document.filename,
+            # Strip any path prefix — show only the clean original filename.
+            "filename": Path(document.filename).name,
             "status": document.status.value,
             "page_count": document.page_count,
             "created_at": document.created_at,

@@ -12,7 +12,7 @@ import {
 } from '../api/client';
 
 interface UploadPageProps {
-  onDocumentUploaded?: (documentId: string) => void;
+  onDocumentUploaded?: (documentId: string, filename: string) => void;
 }
 
 function UploadPage({
@@ -83,7 +83,7 @@ function UploadPage({
           const documentId =
             result.result?.document_id ?? uploadResult.document_id;
 
-          onDocumentUploaded?.(documentId);
+          onDocumentUploaded?.(documentId, uploadResult.filename);
           return;
         }
 
@@ -215,15 +215,19 @@ function UploadPage({
             <strong>Document queued successfully.</strong>
 
             <div>
-              Document ID: {uploadResult.document_id}
-            </div>
-
-            <div>
-              Task ID: {uploadResult.task_id}
+              📄 <strong>{uploadResult.filename}</strong>
             </div>
 
             <div>
               Status: {uploadResult.status}
+            </div>
+
+            <div className="upload-meta">
+              Document ID: {uploadResult.document_id}
+            </div>
+
+            <div className="upload-meta">
+              Task ID: {uploadResult.task_id}
             </div>
           </div>
         )}

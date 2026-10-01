@@ -11,11 +11,13 @@ import EvidenceHighlighter from '../components/EvidenceHighlighter';
 
 interface DocumentViewProps {
   documentId?: string;
+  documentFilename?: string;
   onDocumentSelect: (id: string) => void;
 }
 
 function DocumentView({
   documentId = '',
+  documentFilename = '',
   onDocumentSelect,
 }: DocumentViewProps) {
   const [facts, setFacts] = useState<Fact[]>([]);
@@ -129,7 +131,7 @@ function DocumentView({
               key={document.id}
               type="button"
               className="document-selector-item"
-              onClick={() => onDocumentSelect(document.id)}
+              onClick={() => onDocumentSelect(document.id, document.filename)}
             >
               <strong>{document.filename}</strong>
 
@@ -157,7 +159,14 @@ function DocumentView({
         </p>
 
         <div className="document-id">
-          Document: <strong>{documentId}</strong>
+          <button
+            type="button"
+            className="back-button"
+            onClick={() => onDocumentSelect('')}
+          >
+            ← Back to documents
+          </button>
+          <strong>{documentFilename || documentId}</strong>
         </div>
       </div>
 

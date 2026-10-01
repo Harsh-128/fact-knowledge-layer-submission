@@ -868,3 +868,36 @@ select {
     flex-direction: column;
   }
 }
+
+/* Upload success meta — show IDs in smaller muted text */
+.upload-meta {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 2px;
+  word-break: break-all;
+}
+
+/* Back button in Document View */
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.back-button:hover {
+  text-decoration: underline;
+}
+
+.document-id {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}

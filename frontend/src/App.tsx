@@ -25,15 +25,22 @@ function App() {
     useState<Page>('upload');
 
   const [documentId, setDocumentId] = useState('');
+  const [documentFilename, setDocumentFilename] = useState('');
 
-  const handleDocumentUploaded = (id: string) => {
-  setDocumentId(id);
-};
+  const handleDocumentUploaded = (id: string, filename?: string) => {
+    setDocumentId(id);
+    if (filename) setDocumentFilename(filename);
+  };
 
-const handleDocumentSelect = (id: string) => {
-  setDocumentId(id);
-  setActivePage('document');
-};
+  const handleDocumentSelect = (id: string, filename?: string) => {
+    setDocumentId(id);
+    if (filename) setDocumentFilename(filename);
+    // Empty string means "go back to document list"
+    if (id === '') {
+      setDocumentFilename('');
+    }
+    setActivePage('document');
+  };
 
   const renderPage = () => {
     switch (activePage) {
@@ -51,6 +58,7 @@ const handleDocumentSelect = (id: string) => {
         return (
           <DocumentView
             documentId={documentId}
+            documentFilename={documentFilename}
             onDocumentSelect={handleDocumentSelect}
           />
         );
