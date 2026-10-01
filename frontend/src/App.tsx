@@ -5,6 +5,8 @@ import FactExplorer from './pages/FactExplorer';
 import RelationshipGraph from './pages/RelationshipGraph';
 import UploadPage from './pages/UploadPage';
 import ComparePage from './pages/ComparePage';
+import StatusDashboard from './pages/StatusDashboard';
+import ReviewQueue from './pages/ReviewQueue';
 
 import './App.css';
 
@@ -13,11 +15,15 @@ type Page =
   | 'facts'
   | 'document'
   | 'relationships'
-  | 'compare';
+  | 'compare'
+  | 'status'
+  | 'review';
 
 const navigation: { id: Page; label: string }[] = [
   { id: 'upload', label: 'Upload' },
+  { id: 'status', label: '📊 Status' },
   { id: 'facts', label: 'Fact Explorer' },
+  { id: 'review', label: '🔍 Review' },
   { id: 'document', label: 'Document View' },
   { id: 'relationships', label: 'Relationships' },
   { id: 'compare', label: 'Compare' },
@@ -71,6 +77,12 @@ function App() {
 
       case 'compare':
         return <ComparePage />;
+
+      case 'status':
+        return <StatusDashboard />;
+
+      case 'review':
+        return <ReviewQueue />;
 
       default:
         return <UploadPage />;

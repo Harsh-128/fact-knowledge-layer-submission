@@ -130,6 +130,7 @@ export async function getFacts(params?: {
   document_id?: string;
   entity_id?: string;
   attribute?: string;
+  needs_review?: boolean;
   limit?: number;
   offset?: number;
 }): Promise<Fact[]> {
@@ -193,5 +194,39 @@ export async function compareDocuments(
   const response = await apiClient.post<CompareResponse>('/compare', {
     document_ids: documentIds,
   });
+  return response.data;
+}
+
+export interface DocumentStatus {
+  id: string;
+  filename: string;
+  status: string;
+  page_count: number | null;
+  chunk_count: number;
+  fact_count: number;
+  needs_review_count: number;
+  created_at: string;
+  processed_at: string | null;
+  error_message: string | null;
+}
+
+export async function getDocumentStatus(
+  documentId: string,
+): Promise<DocumentStatus> {
+  const response = await apiClient.get<DocumentStatus>(
+    `/documents/${encodeURIComponent(documentId)}/status`,
+  );
+  return response.data;
+}
+
+export async function reviewFact(
+  factId: string,
+  accept: boolean,
+  note?: string,
+): Promise<{ fact_id: string; accepted: boolean; needs_review: boolean }> {
+  const response = await apiClient.patch(
+    `/facts/${encodeURIComponent(factId)}/review`,
+    { accept, note: note ?? '' },
+  );
   return response.data;
 }

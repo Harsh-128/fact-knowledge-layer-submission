@@ -4,9 +4,12 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_database, require_api_key
 from app.config import settings
+from app.infra.db.models_orm import ChunkORM, FactORM
 from app.infra.db.repositories.document_repo import DocumentRepository
 from app.workers.tasks_ingestion import ingest_document_task
 
@@ -46,6 +49,54 @@ def list_documents(
         }
         for document in documents
     ]
+
+
+@router.get("/{document_id}/status")
+def get_document_status(
+    document_id: str,
+    db: Session = Depends(get_database),
+) -> dict:
+    """
+    Return processing status and counts for a single document.
+    Used by the Status Dashboard for live polling.
+    """
+
+    repository = DocumentRepository(db)
+    document = repository.get_by_id(document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {document_id}",
+        )
+
+    chunk_count = db.execute(
+        select(func.count()).where(ChunkORM.document_id == document_id)
+    ).scalar() or 0
+
+    fact_count = db.execute(
+        select(func.count()).where(FactORM.document_id == document_id)
+    ).scalar() or 0
+
+    needs_review_count = db.execute(
+        select(func.count()).where(
+            FactORM.document_id == document_id,
+            FactORM.needs_review.is_(True),
+        )
+    ).scalar() or 0
+
+    return {
+        "id": document.id,
+        "filename": Path(document.filename).name,
+        "status": document.status.value,
+        "page_count": document.page_count,
+        "chunk_count": chunk_count,
+        "fact_count": fact_count,
+        "needs_review_count": needs_review_count,
+        "created_at": document.created_at,
+        "processed_at": document.processed_at,
+        "error_message": document.error_message,
+    }
 
 
 @router.post(
