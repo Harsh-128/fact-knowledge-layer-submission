@@ -6,822 +6,540 @@ The Fact Knowledge Layer converts heterogeneous PDF documents into structured, e
 
 The system is designed to:
 
-- Extract meaningful numerical and semantic facts.
-- Ground every persisted fact to its source document evidence.
-- Resolve entities across documents.
-- Compare related facts across documents.
-- Identify corroboration, contradiction, and reconciliation through context.
-- Process PDFs asynchronously.
-- Allow new documents to be added without rebuilding the existing knowledge layer.
+- Extract meaningful numerical and semantic facts from any PDF domain.
+- Ground every persisted fact to its source document, page, chunk, and exact quote.
+- Resolve entity mentions across documents to a shared canonical entity.
+- Compare related facts across documents to find corroboration, contradiction, and reconciliation.
+- Process PDFs asynchronously so uploads return immediately.
+- Allow new documents to be added incrementally without rebuilding the knowledge layer.
+- Support selective comparison between chosen documents.
+- Provide a full human-review workflow for uncertain facts.
+- Expose analytics, entity exploration, and export capabilities.
 
 ---
 
 ## 2. High-Level Architecture
 
 ```text
-                         ┌─────────────────────────────┐
-                         │       React / Vite UI       │
-                         │                             │
-                         │  Upload                     │
-                         │  Fact Explorer              │
-                         │  Document View              │
-                         │  Relationship Explorer     │
-                         └──────────────┬──────────────┘
-                                        │
-                                        │ HTTP / REST
-                                        ▼
-                         ┌─────────────────────────────┐
-                         │      FastAPI Backend        │
-                         │                             │
-                         │  Document APIs              │
-                         │  Fact APIs                  │
-                         │  Relationship APIs          │
-                         │  Job Status APIs            │
-                         └──────────────┬──────────────┘
-                                        │
-                                        │ Background Job
-                                        ▼
-                         ┌─────────────────────────────┐
-                         │       Redis + Celery        │
-                         │      Worker Processing      │
-                         └──────────────┬──────────────┘
-                                        │
-                    ┌───────────────────┼───────────────────┐
-                    │                   │                   │
-                    ▼                   ▼                   ▼
-             PDF Ingestion       Fact Extraction       Comparison
-                    │                   │                   │
-                    ▼                   ▼                   ▼
-             PDF Parsing          Ollama / LLM        Fact Comparison
-                    │                   │                   │
-                    ▼                   ▼                   │
-              Chunking          Structured Facts          │
-                    │                   │                   │
-                    │                   ▼                   │
-                    │          Evidence Validation         │
-                    │                   │                   │
-                    │                   ▼                   │
-                    │          Entity Resolution            │
-                    │                   │                   │
-                    │                   ▼                   │
-                    │           Fact Clustering              │
-                    │                   │                   │
-                    └───────────────────┴───────────────────┘
-                                        │
-                                        ▼
-                         ┌─────────────────────────────┐
-                         │    PostgreSQL + pgvector    │
-                         │                             │
-                         │ Documents                   │
-                         │ Chunks                      │
-                         │ Entities                    │
-                         │ Facts                       │
-                         │ Embeddings                  │
-                         │ Relationships               │
-                         └─────────────────────────────┘
+                    ┌─────────────────────────────────────────┐
+                    │           React / Vite UI               │
+                    │                                         │
+                    │  Upload          Status Dashboard       │
+                    │  Analytics       Fact Explorer          │
+                    │  Entity Explorer Review Queue           │
+                    │  Document View   Relationship Explorer  │
+                    │  Compare                                │
+                    └──────────────────┬──────────────────────┘
+                                       │ HTTP / REST
+                                       ▼
+                    ┌─────────────────────────────────────────┐
+                    │           FastAPI Backend               │
+                    │                                         │
+                    │  /documents   /facts      /entities     │
+                    │  /relationships           /compare      │
+                    │  /analytics   /schema     /jobs         │
+                    └──────────────────┬──────────────────────┘
+                                       │ Background job
+                                       ▼
+                    ┌─────────────────────────────────────────┐
+                    │          Redis + Celery Workers         │
+                    └────────────┬──────────────┬────────────┘
+                                 │              │
+                   ┌─────────────▼──┐    ┌──────▼──────────────┐
+                   │  tasks_ingest  │    │  tasks_extraction    │
+                   │  tasks_compare │    │  (batch + fallback)  │
+                   └─────────────┬──┘    └──────┬───────────────┘
+                                 │              │
+                    ┌────────────▼──────────────▼────────────┐
+                    │        PostgreSQL + pgvector            │
+                    │                                         │
+                    │  documents  chunks    entities          │
+                    │  facts      fact_types relationships    │
+                    └─────────────────────────────────────────┘
 ```
 
 ---
 
 ## 3. End-to-End Processing Pipeline
 
-A PDF moves through the following stages:
-
 ```text
 PDF Upload
     ↓
-Document Creation
+SHA-256 duplicate check → skip if already processed
     ↓
-Background Job
+Document record created
     ↓
-PDF Parsing
+Background job (Celery)
     ↓
-Page-aware Chunking
+PDF parsing (PyMuPDF)
     ↓
-LLM Fact Extraction
+Page-aware chunking
     ↓
-Evidence Validation
+Chunk candidate filtering (skip boilerplate)
     ↓
-Entity Resolution
+Financial table detection → deterministic extraction (no LLM)
+    OR
+LLM batch extraction (Gemini / Ollama / OpenAI)
     ↓
-Fact Clustering
+Evidence validation (page + quote + offset)
     ↓
-Cross-document Comparison
+Entity resolution (exact → alias → normalised → new)
     ↓
-Relationship Creation
+Fact type registration (get_or_create)
     ↓
-PostgreSQL Persistence
+Fact persistence
+    ↓
+Compare tasks dispatched per (entity_id, attribute) pair
+    ↓
+Exact duplicate check → CORROBORATES (no LLM)
+    OR
+LLM semantic comparison → CORROBORATES / CONTRADICTS / RECONCILES / UNRELATED
+    ↓
+Relationship persistence
     ↓
 React UI
 ```
-
-Each stage has a specific responsibility and can be tested or improved independently.
 
 ---
 
 ## 4. Document Ingestion
 
-The FastAPI application accepts PDF uploads through the document API.
+The FastAPI `POST /documents/upload` endpoint:
 
-The ingestion process creates a document record and starts asynchronous processing using Celery and Redis.
+1. Validates file extension and PDF magic bytes (`%PDF`).
+2. Checks file size against `MAX_UPLOAD_SIZE_MB`.
+3. Writes a temporary file to the upload directory.
+4. Dispatches `ingest_document_task` via Celery and returns immediately.
 
-The document stores information such as:
+The Celery ingestion task:
 
-```text
-Document ID
-Filename
-SHA-256 hash
-Upload time
-Status
-Page count
-```
-
-Content hashing is also used to identify duplicate documents and avoid unnecessary re-processing.
+- Computes SHA-256 of the file content.
+- Looks up existing documents by hash — returns the existing document ID if found (deduplication).
+- On retry: checks if the document was already committed to avoid re-ingestion.
+- On success: deletes the temporary file.
+- Dispatches `extract_facts_task` after commit.
 
 ---
 
 ## 5. PDF Parsing and Chunking
 
-The PDF is parsed into page-aware text.
+`PDFParser` uses PyMuPDF to extract:
 
-The parser retains source information so that extracted facts can later be traced back to the original document.
+- Page-level plain text (`get_text("text")`)
+- Block-level coordinates (`get_text("blocks")`) for evidence highlighting
 
-The parsed content is divided into manageable chunks before being sent to the LLM.
+`PDFChunker` splits pages into manageable overlapping chunks, preserving:
 
-Conceptually:
+- Document ID
+- Page number (1-based)
+- Character start/end offsets
+- Chunk index
 
-```text
-PDF
- │
- ├── Page 1
- │     ├── Chunk 1
- │     └── Chunk 2
- │
- ├── Page 2
- │     ├── Chunk 3
- │     └── Chunk 4
- │
- └── Page N
-       └── Chunk N
-```
-
-Each chunk retains:
-
-```text
-Document ID
-Page Number
-Character Start
-Character End
-Chunk Text
-Embedding
-```
-
-This page and character information is important for evidence grounding.
-
-### Known limitation
-
-Complex PDF tables can lose their original row/column relationships during text extraction. This was discovered during testing with an additional unseen stock-report PDF.
+**Known limitation:** Complex PDF tables can lose row/column relationships. Column values may not map reliably to their row headers during plain-text extraction.
 
 ---
 
 ## 6. LLM Fact Extraction
 
-Each chunk is processed by the LLM using a structured extraction prompt.
+Each chunk passes through a two-stage filter before reaching the LLM:
 
-The model is instructed to identify meaningful facts rather than generate a general document summary.
+### Stage 1 — Candidate filter (deterministic)
 
-A fact can contain:
+Chunks are skipped when they contain no numerics, dates, units, factual verbs, or relational language. This avoids sending boilerplate (table of contents, headers) to the LLM.
 
-```text
-Entity
-Attribute / Fact Type
-Value
-Unit
-Temporal Scope
-Confidence
-Evidence
-Review Status
-```
+### Stage 2 — Financial table detection (deterministic)
 
-Example conceptual output:
+Chunks containing multiple quarter labels (`Q1 FY24`, `Q2 FY24`, …) are handled by a deterministic table parser that extracts values per row and period. No LLM call is made for these chunks.
+
+### Stage 3 — LLM batch extraction
+
+Remaining chunks are sent to the LLM in batches of 4. The prompt requires the model to return:
 
 ```json
 {
-  "entity": "Example Company",
+  "entity": "Company Name",
   "attribute": "revenue",
   "value": 1860,
   "unit": "INR crore",
-  "temporal_scope": {
-    "period": "Q1 FY24"
-  },
-  "confidence": 0.90,
+  "temporal_scope": { "period_label": "Q1 FY24", "granularity": "quarter" },
+  "confidence": 0.92,
   "evidence": {
     "page": 14,
-    "quote": "Revenue for Q1 FY24 was INR 1,860 crore."
+    "chunk_id": "chunk:abc123",
+    "quoted_text": "Revenue for Q1 FY24 was INR 1,860 crore."
   }
 }
 ```
 
-The actual fact representation remains flexible because different PDFs can contain different types of information.
+If a batch fails (malformed LLM output, 429 rate limit, 503 overload), each chunk is retried individually as a fallback.
 
 ---
 
 ## 7. Evidence Grounding
 
-Evidence grounding is a core reliability mechanism.
-
-The LLM must provide supporting evidence for an extracted fact.
-
-The backend validates the returned evidence against the original chunk:
+Every extracted fact must pass evidence validation before persistence:
 
 ```text
-LLM Fact
+LLM returns evidence
     ↓
-Page Validation
+Page number matches source chunk page?
     ↓
-Chunk Validation
+quoted_text is non-empty?
     ↓
-Exact Quote Validation
+quoted_text found in source chunk text?
     ↓
-Character Offset Calculation
+Character offsets calculated
     ↓
-Persist Fact
+Fact persisted
 ```
 
-A fact is not silently accepted just because the LLM produced it.
-
-The evidence validation checks that:
-
-1. The referenced page matches the source chunk.
-2. The evidence quote is not empty.
-3. The quote exists in the original chunk text.
-4. Character offsets can be calculated.
-
-If valid evidence cannot be established, the extraction pipeline does not persist the unsupported fact.
-
-This makes the knowledge layer auditable and reduces unsupported LLM-generated information.
+Facts that fail any step are silently dropped with a warning log. This prevents hallucinated facts from entering the knowledge layer.
 
 ---
 
 ## 8. Entity Resolution
 
-The same entity can appear differently across documents.
+The `EntityResolutionService` resolves an entity mention in four stages:
 
-For example:
-
-```text
-Document A:
-"Example Company"
-
-Document B:
-"Example Company Ltd."
-
-Document C:
-"Example Company Limited"
-```
-
-The entity resolution layer attempts to associate these mentions with the same canonical entity.
-
-The conceptual flow is:
-
-```text
-Extracted Entity Mention
-          ↓
-Entity Matching
-          ↓
-Existing Canonical Entity
-          ↓
-Fact Associated With Entity
-```
-
-This is important because cross-document comparison should happen between facts about the same entity rather than simply comparing similar text.
+1. **Exact canonical name match** — in-memory cache first, then direct DB lookup via `get_by_canonical_name()` (indexed query, not a table scan).
+2. **Alias match** — JSONB containment lookup in PostgreSQL.
+3. **Normalised match** — strips legal suffixes (`Ltd`, `Limited`, `Corp`) and compares lowercased cores.
+4. **New entity** — when no match is found, a new canonical entity is created and persisted.
 
 ---
 
-## 9. Fact Clustering
+## 9. Fact Clustering and Comparison
 
-After entity resolution, facts are grouped using their canonical entity and attribute.
+Facts are grouped by `(entity_id, attribute)`. Only groups with facts from at least two different documents enter comparison.
 
-Conceptually:
+### Exact duplicate fast path
 
-```text
-Entity: Example Company
-│
-├── Revenue
-│    ├── Fact A — Document 1
-│    ├── Fact B — Document 2
-│    └── Fact C — Document 3
-│
-├── Employees
-│    ├── Fact D — Document 1
-│    └── Fact E — Document 3
-│
-└── Location
-     └── Fact F — Document 2
-```
+When two facts have identical entity, attribute, fact_type, value, unit, and temporal_scope, they are classified as `CORROBORATES` without any LLM call.
 
-Only relevant facts should be compared with each other.
+### LLM semantic comparison
 
-This prevents unrelated facts from being incorrectly classified as contradictions.
+For non-identical pairs, the comparison prompt includes both facts' full context (value, unit, temporal scope, evidence) and asks the LLM to classify the relationship as one of:
 
----
+| Type | Meaning |
+|---|---|
+| `CORROBORATES` | Facts represent the same underlying information |
+| `CONTRADICTS` | Facts describe the same context but conflict |
+| `RECONCILES` | Values appear different but context explains the difference |
+| `UNRELATED` | Facts are not comparable (blocked before LLM call) |
 
-## 10. Cross-Document Comparison
+Relationships include a human-readable `explanation` generated by the LLM.
 
-Facts belonging to the same comparison group are passed to the comparison layer.
+### Re-run comparisons
 
-The system identifies:
+Any processed document can have its comparison tasks re-dispatched via `POST /documents/{id}/rerun-comparisons`. This is useful when Gemini 503 errors caused comparison tasks to fail silently.
 
-```text
-CORROBORATES
-CONTRADICTS
-RECONCILES
-```
+### Selective comparison
 
-### Corroboration
-
-Two facts represent the same underlying information.
-
-```text
-Fact A ─────────────┐
-                    ├── CORROBORATES
-Fact B ─────────────┘
-```
-
-### Contradiction
-
-Two facts describe the same relevant entity, attribute, and context but contain conflicting values.
-
-```text
-Fact A: Revenue = 100 INR crore
-Fact B: Revenue = 200 INR crore
-
-              ↓
-
-          CONTRADICTS
-```
-
-### Reconciliation
-
-Two facts appear different but can be explained by context.
-
-For example:
-
-```text
-100 INR crore
-      =
-1000 INR million
-
-              ↓
-
-          RECONCILES
-```
-
-The comparison layer also considers temporal scope and other available context before deciding that two facts genuinely contradict each other.
+The `POST /compare` endpoint accepts a list of document IDs and runs comparison only between facts from those documents. Pre-existing relationships between the selected documents are also included in the response.
 
 ---
 
-## 11. Hybrid Reasoning
+## 10. Data Storage
 
-The system does not rely entirely on the LLM.
+PostgreSQL with pgvector stores six main tables:
 
-It uses deterministic logic where the answer is unambiguous and LLM reasoning where semantic interpretation is required.
+### documents
 
-```text
-                    Fact Pair
-                       │
-              ┌────────┴────────┐
-              │                 │
-              ▼                 ▼
-       Deterministic         LLM Reasoning
-          Checks                  │
-              │                   │
-       Exact matches       Context analysis
-       Evidence checks     Semantic comparison
-       Validation          Explanation
-              │                   │
-              └────────┬──────────┘
-                       ▼
-                 Relationship
+```
+id, filename, content_type, file_size_bytes, sha256,
+page_count, status, error_message, created_at, processed_at
 ```
 
-### Deterministic responsibilities
+The `sha256` column has a unique constraint for deduplication.
 
-- Evidence validation.
-- Exact duplicate handling.
-- Structured output validation.
-- Persistence.
-- Basic data validation.
+### chunks
 
-### LLM responsibilities
-
-- Fact extraction.
-- Semantic interpretation.
-- Context-aware comparison.
-- Contradiction reasoning.
-- Reconciliation reasoning.
-- Relationship explanations.
-
-This provides a balance between predictability and flexibility.
-
----
-
-## 12. Data Storage
-
-The system uses PostgreSQL with pgvector.
-
-The main logical entities are:
-
-```text
-Document
-   │
-   ├── Chunk
-   │
-   └── Fact
-         │
-         ├── Entity
-         ├── Fact Type
-         ├── Evidence
-         └── Relationship
+```
+id, document_id (FK→documents), page_number, chunk_index,
+text, char_start, char_end, token_count
 ```
 
-### Document
+### entities
 
-Stores uploaded document metadata and processing status.
-
-### Chunk
-
-Stores page-aware source text and its position within the document.
-
-### Entity
-
-Stores canonical entities used to connect facts across documents.
-
-### Fact
-
-Stores:
-
-```text
-Document
-Chunk
-Entity
-Attribute
-Value
-Unit
-Temporal Scope
-Confidence
-Raw Extraction
-Embedding
-Review Status
+```
+id, canonical_name, entity_type, aliases (JSONB),
+description, confidence, embedding (VECTOR(1536)),
+created_at, updated_at
 ```
 
-Flexible JSON/JSONB values are used because facts can have different shapes.
+### fact_types
 
-For example:
-
-```text
-Revenue → numerical value + unit + period
-
-Director → person + role + tenure
-
-Address → structured or textual location
+```
+id, name, description, value_schema (JSONB),
+version, is_active, created_at, updated_at
 ```
 
-A rigid schema would make every new fact type require database changes.
+Fact types are data-driven and created on first use. No schema migration needed when new fact types appear.
 
-### Relationship
+### facts
 
-Stores:
+```
+id, document_id (FK), chunk_id (FK), entity_id (FK), fact_type_id (FK),
+attribute, value (JSONB), unit, temporal_scope (JSONB),
+evidence (JSONB), confidence, needs_review, extraction_method,
+raw_extraction (JSONB), created_at
+```
 
-```text
-Fact A
-Fact B
-Relationship Type
-Explanation
-Confidence
-Creation Time
+`value` and `evidence` are JSONB so facts of any shape fit without schema changes.
+
+### relationships
+
+```
+id, source_fact_id (FK→facts), target_fact_id (FK→facts),
+relationship_type, confidence, explanation, evidence (JSONB),
+needs_review, created_at
 ```
 
 ---
 
-## 13. Asynchronous Processing
+## 11. API Surface
 
-LLM inference can take significant time, particularly for large PDFs.
+All routes are registered under `/api/v1/`.
 
-The system therefore uses Celery and Redis:
-
-```text
-FastAPI
-   ↓
-Redis
-   ↓
-Celery Worker
-   ↓
-Ingestion
-   ↓
-Extraction
-   ↓
-Comparison
-```
-
-The API does not need to remain blocked while the complete pipeline executes.
-
-The frontend can monitor job status and display processing progress and resulting counts.
-
-This architecture also makes it possible to extend processing to larger documents and multiple PDFs.
+| Router | Prefix | Key endpoints |
+|---|---|---|
+| documents | `/documents` | list, upload, delete, status, rerun-comparisons |
+| facts | `/facts` | list (with needs_review filter), get, PATCH review |
+| relationships | `/relationships` | list (with doc + type filter), get |
+| entities | `/entities` | list (search + type filter), get (facts grouped by attribute) |
+| compare | `/compare` | POST with document_ids list |
+| analytics | `/analytics` | GET /summary — all stats in one call |
+| schema | `/schema` | fact-type CRUD, DB-backed |
+| jobs | `/jobs` | Celery AsyncResult status |
 
 ---
 
-## 14. Backend Architecture
+## 12. Frontend Architecture
 
-The backend separates API logic, domain logic, infrastructure, and background workers.
+Nine pages built with React 19 + TypeScript + Vite:
 
-```text
-backend/
-└── app/
+| Page | Purpose |
+|---|---|
+| `UploadPage` | Upload PDF, show filename in success message, poll job status |
+| `StatusDashboard` | Live-polling cards with chunk/fact/review counts per document; re-run button |
+| `AnalyticsPage` | System-wide charts: facts per doc, relationship types, confidence distribution, entity types, top attributes, top entities (pure CSS/SVG) |
+| `FactExplorer` | Search/filter/sort facts; min-confidence slider; pagination (50/page); CSV export |
+| `EntityExplorer` | Browse canonical entities; click to see all facts grouped by attribute |
+| `ReviewQueue` | Accept / reject / undo flagged facts with evidence shown |
+| `DocumentView` | Per-document fact list with evidence highlighting; delete button |
+| `RelationshipGraph` | All relationships with explanations; filter by document and type |
+| `ComparePage` | Checkbox-select documents; run selective comparison; see results immediately |
+
+---
+
+## 13. LLM Integration
+
+The `LLMClient` abstraction supports three providers via a single `generate_structured()` interface:
+
+| Provider | Config key | Notes |
+|---|---|---|
+| Gemini | `LLM_PROVIDER=gemini` | Free tier (no credit card); 15 RPM; recommended |
+| Ollama | `LLM_PROVIDER=ollama` | Fully local; no API costs; slower on CPU |
+| OpenAI-compatible | `LLM_PROVIDER=openai` | Works with OpenAI, OpenRouter, and compatible providers |
+
+Retry logic is built into each provider client (4 attempts with exponential backoff). Malformed JSON is repaired with `json-repair` before Pydantic validation. Individual fact items that fail validation are skipped rather than failing the whole batch.
+
+---
+
+## 14. Hybrid Reasoning
+
+The system avoids unnecessary LLM calls by separating deterministic and semantic work:
+
+```
+Fact pair
     │
-    ├── api/
-    │   └── v1/
-    │       ├── documents
-    │       ├── facts
-    │       ├── relationships
-    │       └── jobs
+    ├─ Different entity or attribute → UNRELATED (no LLM)
     │
-    ├── domain/
-    │   ├── models/
-    │   │   ├── document
-    │   │   ├── chunk
-    │   │   ├── entity
-    │   │   ├── fact
-    │   │   └── relationship
-    │   │
-    │   └── services/
-    │       ├── ingestion
-    │       ├── extraction
-    │       ├── entity resolution
-    │       └── comparison
+    ├─ Identical value/unit/scope → CORROBORATES (no LLM)
     │
-    ├── infra/
-    │   ├── database
-    │   ├── vector operations
-    │   ├── LLM integration
-    │   └── PDF processing
-    │
-    └── workers/
-        ├── Celery application
-        ├── ingestion tasks
-        ├── extraction tasks
-        └── comparison tasks
+    └─ Needs semantic reasoning → LLM comparison
 ```
 
-This separation keeps the core knowledge-layer logic independent from infrastructure-specific implementations.
+Deterministic responsibilities:
+- Evidence validation
+- Exact duplicate detection
+- Financial table extraction
+- Chunk candidate filtering
+- Structural output validation
+- Persistence and deduplication
+
+LLM responsibilities:
+- Fact extraction from arbitrary text
+- Semantic interpretation of values
+- Context-aware comparison
+- Contradiction and reconciliation reasoning
+- Relationship explanation generation
 
 ---
 
-## 15. Frontend Architecture
-
-The frontend is built using React/Vite.
+## 15. Asynchronous Processing
 
 ```text
-frontend/
-└── src/
-    ├── pages/
-    │   ├── UploadPage
-    │   ├── DocumentView
-    │   ├── FactExplorer
-    │   └── RelationshipGraph
-    │
-    └── components/
-        ├── EvidenceHighlighter
-        ├── FactCard
-        └── RelationshipBadge
+FastAPI (sync response: document_id + task_id)
+    ↓
+Redis broker
+    ↓
+Celery worker
+    ↓
+ingest_document_task
+    ↓
+extract_facts_task (dispatched after commit)
+    ↓
+compare_facts_task × N (one per entity+attribute pair, dispatched after extraction)
 ```
 
-### Main UI capabilities
+The frontend polls `GET /jobs/{task_id}` every 2 seconds to track ingestion.  
+The Status Dashboard polls `GET /documents/{id}/status` every 3 seconds during active processing.
+
+---
+
+## 16. Error Handling and Reliability
+
+| Failure type | Handling |
+|---|---|
+| Invalid PDF magic bytes | Rejected at upload with 415 |
+| Duplicate PDF (same SHA-256) | Returns existing document ID immediately |
+| Empty / boilerplate chunk | Skipped before LLM call |
+| Malformed LLM JSON | `json-repair` → Pydantic validation → item-level skip |
+| LLM 429 / 503 | Retry with backoff (up to 4 attempts) |
+| Evidence not found in chunk | Fact dropped, warning logged |
+| Comparison failure | Logged and skipped; re-dispatchable via re-run endpoint |
+| Celery retry on non-transient error | Narrowed `autoretry_for` to `(ConnectionError, TimeoutError, OSError)` |
+| Malformed JSONB evidence in DB | Wrapped in try/except; bad items skipped, rest of fact loaded |
+| Null temporal_scope in DB | Correctly returns `None` instead of empty TemporalScope |
+
+---
+
+## 17. Incremental Knowledge Building
+
+New PDFs can be added at any time:
 
 ```text
-Upload PDF
+Existing knowledge layer
     ↓
-Track Processing
+New PDF uploaded
     ↓
-View Facts
+Extract new facts
     ↓
-Filter Facts
+Resolve against existing entities
     ↓
-Inspect Evidence
+Compare new facts against ALL existing facts with same entity + attribute
     ↓
-Explore Relationships
+Add new relationships
 ```
 
-The Document View provides source evidence inspection, while Fact Explorer allows facts to be filtered by document, entity, and attribute.
+Existing facts are not re-extracted. Existing relationships are not affected unless the new document introduces a new entity or attribute match.
 
 ---
 
-## 16. LLM Layer
+## 18. Engineering Trade-offs
 
-The LLM integration is isolated from the core business logic.
+### PostgreSQL + pgvector over a dedicated vector database
 
-The final working development setup uses:
+**Benefit:** fewer infrastructure components; relational data and vector operations stay together.  
+**Trade-off:** a dedicated vector DB may be more suitable at very large scale.
 
-```text
-Ollama
-   ↓
-qwen3:8b
-```
+### Celery + Redis over synchronous processing
 
-The LLM is used for:
-
-- Structured fact extraction.
-- Semantic interpretation.
-- Fact comparison.
-- Contradiction reasoning.
-- Reconciliation reasoning.
-- Relationship explanations.
-
-During development, external API usage was also considered, but Gemini API quota limitations led to using local Ollama for the final working implementation.
-
-Keeping the LLM integration isolated makes it possible to change the inference provider without redesigning the complete knowledge pipeline.
-
----
-
-## 17. Error Handling and Reliability
-
-Several reliability mechanisms are implemented.
-
-### Malformed LLM output
-
-If structured batch output cannot be parsed reliably, the extraction pipeline has a fallback path that can process chunks individually.
-
-### Invalid evidence
-
-Evidence is checked against the original source text before the fact is persisted.
-
-### Duplicate documents
-
-Document content hashing helps identify duplicate uploads.
-
-### Low-confidence / uncertain results
-
-Facts and relationships contain confidence and review metadata so uncertain results can be surfaced for future review workflows.
-
----
-
-## 18. Incremental Knowledge Building
-
-New PDFs can be added to the existing knowledge layer.
-
-Conceptually:
-
-```text
-Existing Knowledge Layer
-        │
-        │
-        ▼
-New PDF
-        │
-        ▼
-Extract New Facts
-        │
-        ▼
-Resolve Against Existing Entities
-        │
-        ▼
-Compare Relevant Facts
-        │
-        ▼
-Add New Relationships
-```
-
-The existing facts do not need to be completely rebuilt whenever a new document is uploaded.
-
----
-
-## 19. Engineering Trade-offs
-
-### PostgreSQL + pgvector
-
-Chosen instead of introducing a separate vector database.
-
-**Benefit:**
-- Fewer infrastructure components.
-- Relational data and vector operations remain together.
-
-**Trade-off:**
-- A specialized vector database may be more appropriate at very large scale.
-
-### Celery + Redis
-
-Chosen instead of synchronous processing.
-
-**Benefit:**
-- Long-running PDF and LLM processing does not block API requests.
-- Better foundation for multiple documents.
-
-**Trade-off:**
-- Adds infrastructure and operational complexity.
+**Benefit:** LLM and PDF processing do not block API requests; suitable for large documents.  
+**Trade-off:** adds infrastructure and operational complexity.
 
 ### Evidence-first extraction
 
-The system prioritizes grounded facts rather than maximizing the number of extracted facts.
-
-**Benefit:**
-- Results are auditable.
-- Reduces unsupported facts.
-
-**Trade-off:**
-- Some potentially useful facts may be rejected when reliable evidence cannot be established.
+**Benefit:** every persisted fact is auditable and traceable to a source quote.  
+**Trade-off:** some valid facts may be rejected when the LLM cannot provide a verifiable quote.
 
 ### Hybrid LLM + deterministic reasoning
 
-**Benefit:**
-- LLM provides semantic flexibility.
-- Deterministic logic provides predictable validation.
+**Benefit:** LLM used only where semantic reasoning is needed; deterministic paths are fast, cheap, and predictable.  
+**Trade-off:** more complex than an LLM-only prototype.
 
-**Trade-off:**
-- The system is more complex than an LLM-only prototype.
+### Gemini free tier as default LLM
 
----
-
-## 20. Known Limitations
-
-The current system has several known limitations:
-
-1. Complex PDF tables can lose row/column relationships.
-2. Local LLM inference can be slow for large documents.
-3. LLM structured output can occasionally be malformed or incomplete.
-4. Temporal reasoning becomes difficult when similar metrics refer to different periods.
-5. Entity resolution can be ambiguous for similar entity names.
-6. A complete human-in-the-loop review interface is not yet implemented.
+**Benefit:** no cost, no credit card, ~15 RPM is sufficient for typical use.  
+**Trade-off:** rate limit causes automatic retries on large documents; local Ollama avoids this at the cost of speed.
 
 ---
 
-## 21. Future Improvements
+## 19. Known Limitations
 
-The next improvements would include:
+1. Complex PDF tables can lose row/column relationships during text extraction.
+2. Scanned PDFs (image-based) produce no text — OCR support is not yet implemented.
+3. Gemini free tier hits 429 rate limits on large document batches; retry logic handles this automatically.
+4. Local Ollama inference is slow on CPU (~40 seconds per batch).
+5. Temporal reasoning across different quarters or periods requires deeper context.
+6. Entity resolution can be ambiguous for highly similar entity names.
+
+---
+
+## 20. Future Improvements
 
 ```text
-Table-aware PDF parsing
-        ↓
-Stronger numerical validation
-        ↓
-Improved temporal reasoning
-        ↓
-Better entity matching
-        ↓
-Human review workflow
-        ↓
-Parallel processing / better batching
-        ↓
-Formal evaluation dataset
+Table-aware PDF parsing (preserve row/column structure)
+    ↓
+OCR support for scanned PDFs (Tesseract)
+    ↓
+RAG / natural language Q&A over extracted facts
+    ↓
+Parallel Celery workers for faster large-document processing
+    ↓
+Formal evaluation dataset for extraction accuracy
+    ↓
+Bulk PDF upload
+    ↓
+Email / webhook notification on processing completion
 ```
-
-These improvements would increase extraction accuracy and make the system more suitable for larger document collections.
 
 ---
 
-## 22. End-to-End Summary
-
-The complete knowledge flow is:
+## 21. End-to-End Summary
 
 ```text
                     ┌───────────────┐
                     │   PDF Upload  │
                     └───────┬───────┘
-                            ↓
+                            ↓ SHA-256 dedup check
                     ┌───────────────┐
-                    │    FastAPI    │
+                    │  FastAPI API  │
                     └───────┬───────┘
-                            ↓
+                            ↓ async dispatch
                     ┌───────────────┐
                     │ Celery + Redis│
                     └───────┬───────┘
                             ↓
                     ┌───────────────┐
-                    │ PDF Parse     │
-                    │ + Chunking    │
+                    │  PDF Parse    │
+                    │  + Chunking   │
                     └───────┬───────┘
-                            ↓
+                            ↓ candidate filter
+                    ┌───────────────────────────┐
+                    │  Deterministic table path │
+                    │  OR LLM batch extraction  │
+                    └───────────┬───────────────┘
+                                ↓
                     ┌───────────────┐
-                    │ LLM Extraction│
-                    └───────┬───────┘
-                            ↓
-                    ┌───────────────┐
-                    │    Evidence   │
-                    │   Validation  │
+                    │   Evidence    │
+                    │  Validation   │
                     └───────┬───────┘
                             ↓
                     ┌───────────────┐
                     │    Entity     │
-                    │   Resolution  │
+                    │  Resolution   │
                     └───────┬───────┘
                             ↓
                     ┌───────────────┐
                     │ Fact Clusters │
+                    │ (entity+attr) │
                     └───────┬───────┘
-                            ↓
+                            ↓ exact dupe → no LLM
                     ┌───────────────┐
-                    │    Compare    │
-                    │ Facts + Context│
+                    │  LLM Compare  │
+                    │  + Explain    │
                     └───────┬───────┘
                             ↓
               ┌─────────────┼─────────────┐
@@ -834,9 +552,12 @@ The complete knowledge flow is:
                     │  + pgvector   │
                     └───────┬───────┘
                             ↓
-                    ┌───────────────┐
-                    │   React UI    │
-                    └───────────────┘
+                    ┌───────────────────────────────────┐
+                    │           React UI                │
+                    │  Status · Analytics · Facts       │
+                    │  Entities · Review · Relationships│
+                    │  Compare · Document View          │
+                    └───────────────────────────────────┘
 ```
 
-The key design principle is **evidence-grounded knowledge rather than simple document summarization**: every useful fact should remain connected to its source, and relationships between facts should be explainable.
+The key design principle is **evidence-grounded knowledge**: every fact traces back to its source, every relationship has an explanation, and no fact enters the system without a verifiable quote from the original document.
