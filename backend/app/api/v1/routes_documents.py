@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.api.v1.deps import get_database, require_api_key
-from app.infra.db.repositories.document_repo import DocumentRepository
-
-from app.api.v1.deps import require_api_key
 from app.config import settings
+from app.infra.db.repositories.document_repo import DocumentRepository
 from app.workers.tasks_ingestion import ingest_document_task
-
 
 
 router = APIRouter(
@@ -49,6 +45,8 @@ def list_documents(
         }
         for document in documents
     ]
+
+
 @router.post(
     "/upload",
     status_code=status.HTTP_202_ACCEPTED,
@@ -97,6 +95,14 @@ async def upload_document(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded PDF is empty.",
+        )
+
+    # H-6: Validate PDF magic bytes to reject non-PDF files regardless of
+    # the filename extension or Content-Type header.
+    if not content.startswith(b"%PDF"):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="File does not appear to be a valid PDF (missing %PDF header).",
         )
 
     upload_dir = Path(settings.upload_dir)

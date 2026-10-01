@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.domain.models.fact_type import FactType
@@ -112,7 +112,7 @@ class SchemaRegistryService:
             )
 
         fact_type.is_active = False
-        fact_type.updated_at = datetime.utcnow()
+        fact_type.updated_at = datetime.now(timezone.utc)
 
         return fact_type
 

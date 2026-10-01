@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.core.exceptions import FactExtractionError
+from app.core.logging import get_logger
 from app.domain.models.chunk import Chunk
 from app.domain.models.document import Document
 from app.domain.models.fact import Fact
@@ -18,6 +19,8 @@ from app.infra.llm.schemas import (
     ExtractedFact,
     FactExtractionResponse,
 )
+
+logger = get_logger(__name__)
 
 
 PROMPT_FILE = (
@@ -292,11 +295,12 @@ class FactExtractionService:
             return []
 
         if not _is_fact_candidate(chunk.text):
-            print(
-                f"Skipping non-candidate chunk "
-                f"document={document.id} "
-                f"page={chunk.page_number} "
-                f"chunk={chunk.id}"
+            logger.info(
+                "Skipping non-candidate chunk "
+                "document=%s page=%s chunk=%s",
+                document.id,
+                chunk.page_number,
+                chunk.id,
             )
             return []
 
@@ -384,11 +388,12 @@ class FactExtractionService:
                 continue
 
             if not _is_fact_candidate(chunk.text):
-                print(
-                    f"Skipping non-candidate chunk "
-                    f"document={document.id} "
-                    f"page={chunk.page_number} "
-                    f"chunk={chunk.id}"
+                logger.info(
+                    "Skipping non-candidate chunk "
+                    "document=%s page=%s chunk=%s",
+                    document.id,
+                    chunk.page_number,
+                    chunk.id,
                 )
                 continue
 
@@ -423,9 +428,9 @@ class FactExtractionService:
             )
 
             if source_chunk is None:
-                print(
-                    f"Skipping extracted fact '{extracted_fact.attribute}': "
-                    "source chunk could not be determined."
+                logger.warning(
+                    "Skipping extracted fact '%s': source chunk could not be determined.",
+                    extracted_fact.attribute,
                 )
                 continue
 
@@ -436,9 +441,10 @@ class FactExtractionService:
                     document=document,
                 )
             except FactExtractionError as exc:
-                print(
-                    f"Skipping unsupported extracted fact "
-                    f"'{extracted_fact.attribute}': {exc}"
+                logger.warning(
+                    "Skipping unsupported extracted fact '%s': %s",
+                    extracted_fact.attribute,
+                    exc,
                 )
                 continue
 
@@ -1011,9 +1017,10 @@ IMPORTANT:
                     document=document,
                 )
             except FactExtractionError as exc:
-                print(
-                    f"Skipping unsupported extracted fact "
-                    f"'{extracted_fact.attribute}': {exc}"
+                logger.warning(
+                    "Skipping unsupported extracted fact '%s': %s",
+                    extracted_fact.attribute,
+                    exc,
                 )
                 continue
 

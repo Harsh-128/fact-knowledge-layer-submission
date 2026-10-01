@@ -4,6 +4,7 @@ from app.api.v1.routes_documents import router as documents_router
 from app.api.v1.routes_facts import router as facts_router
 from app.api.v1.routes_jobs import router as jobs_router
 from app.api.v1.routes_relationships import router as relationships_router
+from app.api.v1.routes_schema import router as schema_router  # C-3: was never registered
 from app.config import settings
 from app.core.logging import setup_logging
 
@@ -62,5 +63,10 @@ app.include_router(
 
 app.include_router(
     relationships_router,
+    prefix=settings.api_v1_prefix,
+)
+
+app.include_router(
+    schema_router,
     prefix=settings.api_v1_prefix,
 )

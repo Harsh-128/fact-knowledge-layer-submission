@@ -8,9 +8,9 @@ from app.infra.db.repositories.chunk_repo import ChunkRepository
 from app.infra.db.repositories.document_repo import DocumentRepository
 from app.infra.db.repositories.entity_repo import EntityRepository
 from app.infra.db.repositories.fact_repo import FactRepository
+from app.infra.db.repositories.fact_type_repo import FactTypeRepository
 from app.infra.db.session import SessionLocal
 from app.workers.celery_app import celery_app
-from app.infra.db.repositories.fact_type_repo import FactTypeRepository
 
 
 logger = get_logger(__name__)
@@ -199,6 +199,26 @@ def extract_facts_task(
             len(extracted_facts),
             review_count,
         )
+
+        # C-2: Dispatch comparison tasks for every unique (entity, attribute)
+        # pair found in the newly extracted facts. Imported here to avoid a
+        # circular import at module level (tasks_comparison imports from this
+        # same workers package).
+        if extracted_facts:
+            from app.workers.tasks_comparison import compare_facts_task  # noqa: PLC0415
+
+            seen_pairs: set[tuple[str, str]] = set()
+            for fact in extracted_facts:
+                pair = (fact.entity_id, fact.attribute)
+                if pair not in seen_pairs:
+                    seen_pairs.add(pair)
+                    compare_facts_task.delay(fact.entity_id, fact.attribute)
+
+            logger.info(
+                "Dispatched %s comparison task(s) for document_id=%s",
+                len(seen_pairs),
+                document_id,
+            )
 
         return {
             "document_id": document_id,

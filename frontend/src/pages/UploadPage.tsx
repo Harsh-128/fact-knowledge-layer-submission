@@ -58,6 +58,9 @@ function UploadPage({
     }
 
     let cancelled = false;
+    // H-8: Track the timer ID so it can be cleared on unmount, preventing
+    // an infinite setTimeout chain after the component is removed from the DOM.
+    let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
 
     const pollJobStatus = async () => {
       try {
@@ -95,7 +98,7 @@ function UploadPage({
           return;
         }
 
-        window.setTimeout(
+        timeoutId = window.setTimeout(
           pollJobStatus,
           2000,
         );
@@ -123,6 +126,9 @@ function UploadPage({
 
     return () => {
       cancelled = true;
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
     };
   }, [uploadResult, onDocumentUploaded]);
 

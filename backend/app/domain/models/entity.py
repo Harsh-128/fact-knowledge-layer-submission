@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
@@ -51,12 +51,12 @@ class Entity(BaseModel):
     )
 
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp when the entity was created.",
     )
 
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp when the entity was last updated.",
     )
 
@@ -72,7 +72,7 @@ class Entity(BaseModel):
 
         if not any(existing.lower() == normalized.lower() for existing in self.aliases):
             self.aliases.append(normalized)
-            self.updated_at = datetime.utcnow()
+            self.updated_at = datetime.now(timezone.utc)
 
     def matches(self, name: str) -> bool:
         """

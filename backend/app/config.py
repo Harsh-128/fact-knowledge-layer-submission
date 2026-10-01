@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     and an optional .env file.
     """
 
+    # API key for protecting endpoints (optional; leave empty to disable auth)
+    # L-6: Field was missing — getattr fallback in security.py always returned ""
+    # meaning auth was permanently disabled even when API_KEY was set in .env.
+    api_key: str = Field(default="")
+
     # Application
     app_name: str = "Fact Knowledge Layer"
     app_version: str = "0.1.0"
@@ -46,11 +51,17 @@ class Settings(BaseSettings):
 
     # Gemini - optional provider
     gemini_api_key: str = Field(default="")
-    gemini_model: str = "gemini-3.6-flash"
+    gemini_model: str = "gemini-2.0-flash"  # H-4: was "gemini-3.6-flash" (non-existent)
 
     # File storage
     upload_dir: str = "./storage/uploads"
     max_upload_size_mb: int = 50
+
+    # Vector embeddings
+    # H-5: Dimension must match the embedding model in use.
+    # Ollama models typically produce 768 or 1024 dims, not 1536 (OpenAI).
+    # Override with EMBEDDING_DIM in .env when switching models.
+    embedding_dim: int = 1536
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from app.core.logging import get_logger
+from app.core.exceptions import UnsupportedDocumentError
 from app.domain.services.ingestion_service import IngestionService
 from app.infra.db.repositories.chunk_repo import ChunkRepository
 from app.infra.db.repositories.document_repo import DocumentRepository
@@ -17,7 +19,9 @@ logger = get_logger(__name__)
 @celery_app.task(
     bind=True,
     name="documents.ingest",
-    autoretry_for=(Exception,),
+    # M-3: Only retry on transient I/O and connection errors.
+    # Permanent failures (corrupt PDF, wrong file type) must not be retried.
+    autoretry_for=(ConnectionError, TimeoutError, OSError),
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
 )
@@ -51,21 +55,13 @@ def ingest_document_task(
         document_repository = DocumentRepository(db)
         chunk_repository = ChunkRepository(db)
 
-        # Calculate the document hash before creating a new database record.
-        file_sha256 = document_repository._calculate_sha256(
-            temporary_path
-        ) if hasattr(document_repository, "_calculate_sha256") else None
-
-        if file_sha256 is None:
-            import hashlib
-
-            digest = hashlib.sha256()
-
-            with temporary_path.open("rb") as file:
-                for block in iter(lambda: file.read(1024 * 1024), b""):
-                    digest.update(block)
-
-            file_sha256 = digest.hexdigest()
+        # M-1: Removed dead hasattr(_calculate_sha256) branch.
+        # Always use the inline hashlib implementation.
+        digest = hashlib.sha256()
+        with temporary_path.open("rb") as file:
+            for block in iter(lambda: file.read(1024 * 1024), b""):
+                digest.update(block)
+        file_sha256 = digest.hexdigest()
 
         # Reuse an already-ingested document instead of violating the
         # documents.sha256 unique constraint.
@@ -89,7 +85,7 @@ def ingest_document_task(
             # The temporary upload is no longer needed because the document
             # already exists in the database.
             if temporary_path.exists():
-                temporary_path.unlink()
+                temporary_path.unlink(missing_ok=True)
 
             return {
                 "document_id": existing_document.id,
@@ -99,6 +95,30 @@ def ingest_document_task(
                 "chunk_count": len(existing_chunks),
                 "sha256": existing_document.sha256,
             }
+
+        # M-7: Guard against redundant re-ingestion on Celery retry.
+        # If the document was already created (commit succeeded before the
+        # Celery broker call failed), skip ingestion and only re-dispatch
+        # the extraction task.
+        if document_id is not None:
+            already_ingested = document_repository.get_by_id(document_id)
+            if already_ingested is not None:
+                logger.info(
+                    "Document already ingested on a previous attempt, "
+                    "re-dispatching extraction: document_id=%s",
+                    document_id,
+                )
+                extract_facts_task.delay(already_ingested.id)
+                if temporary_path.exists():
+                    temporary_path.unlink(missing_ok=True)
+                return {
+                    "document_id": already_ingested.id,
+                    "filename": already_ingested.filename,
+                    "status": "already_exists",
+                    "page_count": already_ingested.page_count,
+                    "chunk_count": 0,
+                    "sha256": already_ingested.sha256,
+                }
 
         ingestion_service = IngestionService()
 
@@ -116,6 +136,11 @@ def ingest_document_task(
         )
 
         db.commit()
+
+        # C-4: Delete the temporary upload file after a successful ingestion.
+        # The ingestion service has already saved a permanent copy to storage.
+        if temporary_path.exists():
+            temporary_path.unlink(missing_ok=True)
 
         extract_facts_task.delay(persisted_document.id)
 
@@ -135,6 +160,18 @@ def ingest_document_task(
             "storage_path": result.storage_path,
             "sha256": persisted_document.sha256,
         }
+
+    except (UnsupportedDocumentError, FileNotFoundError, ValueError) as exc:
+        # M-3: Permanent failures — do not retry, just log and re-raise so
+        # Celery marks the task as FAILURE immediately.
+        db.rollback()
+        logger.error(
+            "Document ingestion permanent failure: file=%s document_id=%s error=%s",
+            file_path,
+            document_id,
+            exc,
+        )
+        raise
 
     except Exception:
         db.rollback()

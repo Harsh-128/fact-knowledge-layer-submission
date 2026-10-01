@@ -5,7 +5,12 @@ from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.infra.db.models_orm import EntityORM
+
+# H-5: Use the configured dimension instead of a hardcoded 1536.
+# Set EMBEDDING_DIM in .env to match the actual embedding model output size.
+_EMBEDDING_DIM: int = settings.embedding_dim
 
 
 class PGVectorClient:
@@ -35,9 +40,9 @@ class PGVectorClient:
 
         vector = list(embedding)
 
-        if len(vector) != 1536:
+        if len(vector) != _EMBEDDING_DIM:
             raise ValueError(
-                f"Expected a 1536-dimensional embedding, got {len(vector)}."
+                f"Expected a {_EMBEDDING_DIM}-dimensional embedding, got {len(vector)}."
             )
 
         entity.embedding = vector
@@ -65,41 +70,33 @@ class PGVectorClient:
 
         vector = list(embedding)
 
-        if len(vector) != 1536:
+        if len(vector) != _EMBEDDING_DIM:
             raise ValueError(
-                f"Expected a 1536-dimensional embedding, got {len(vector)}."
+                f"Expected a {_EMBEDDING_DIM}-dimensional embedding, got {len(vector)}."
             )
 
         if limit < 1:
             raise ValueError("limit must be at least 1.")
 
+        distance = EntityORM.embedding.cosine_distance(vector)
+
+        statement = (
+            select(EntityORM, distance.label("distance"))
+            .where(EntityORM.embedding.is_not(None))
+            .order_by(distance)
+            .limit(limit)
+        )
+
         if entity_type:
-            distance = EntityORM.embedding.cosine_distance(vector)
-
-            statement = (
-                select(EntityORM, distance.label("distance"))
-                .where(
-                    EntityORM.embedding.is_not(None),
-                    EntityORM.entity_type == entity_type,
-                )
-                .order_by(distance)
-                .limit(limit)
-            )
-        else:
-            distance = EntityORM.embedding.cosine_distance(vector)
-
-            statement = (
-                select(EntityORM, distance.label("distance"))
-                .where(EntityORM.embedding.is_not(None))
-                .order_by(distance)
-                .limit(limit)
+            statement = statement.where(
+                EntityORM.entity_type == entity_type
             )
 
         results = self.db.execute(statement).all()
 
         return [
-            (entity, float(distance))
-            for entity, distance in results
+            (entity, float(dist))
+            for entity, dist in results
         ]
 
     def delete_entity_embedding(

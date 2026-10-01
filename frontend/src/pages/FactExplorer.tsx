@@ -28,12 +28,13 @@ function FactExplorer() {
 
       setFacts(result);
 
-      if (
-        selectedFact &&
-        !result.some((fact) => fact.id === selectedFact.id)
-      ) {
-        setSelectedFact(null);
-      }
+      // L-7: Use the functional form of setSelectedFact so we read the
+      // current value of selectedFact from state rather than a potentially
+      // stale closure capture. This means the sidebar always clears when
+      // the selected fact is no longer in the new result set.
+      setSelectedFact((prev) =>
+        prev && !result.some((fact) => fact.id === prev.id) ? null : prev,
+      );
     } catch (loadError) {
       setFacts([]);
 
@@ -47,11 +48,16 @@ function FactExplorer() {
     } finally {
       setLoading(false);
     }
+    // selectedFact intentionally omitted: the functional setState above reads
+    // the current value without needing it as a dependency, avoiding an
+    // infinite re-render loop.
   }, [attribute, documentId, entityId]);
 
+  // H-3: Include loadFacts in the dependency array so the initial fetch
+  // always uses the current (non-stale) version of the callback.
   useEffect(() => {
     void loadFacts();
-  }, []);
+  }, [loadFacts]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

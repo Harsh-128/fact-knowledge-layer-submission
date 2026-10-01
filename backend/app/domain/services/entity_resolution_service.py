@@ -229,13 +229,15 @@ Return the best candidate only when the evidence supports the match.
                 return entity
 
         if self.entity_repository is not None:
-            # The repository stores the original canonical name, so
-            # first try an exact database lookup. If normalization was
-            # required, the normalized-match stage below can handle it.
-            for entity in self.entity_repository.list_entities(limit=1000):
-                if self._normalize_name(entity.canonical_name) == normalized_name:
-                    self._entities[entity.id] = entity
-                    return entity
+            # M-2: Use a direct DB lookup by canonical name instead of
+            # fetching up to 1000 rows and scanning them in Python.
+            # get_by_canonical_name() issues a single indexed WHERE query.
+            db_entity = self.entity_repository.get_by_canonical_name(
+                normalized_name,
+            )
+            if db_entity is not None:
+                self._entities[db_entity.id] = db_entity
+                return db_entity
 
         return None
 

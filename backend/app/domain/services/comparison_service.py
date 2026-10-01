@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from app.core.exceptions import FactComparisonError
 from app.domain.models.fact import Fact
 from app.domain.models.relationship import Relationship, RelationshipType
@@ -374,7 +376,10 @@ Return only the structured comparison response.
         """Construct a domain relationship object."""
 
         return Relationship(
-            id=f"relationship:{source_fact.id}:{target_fact.id}",
+            # H-7: Use a random UUID so re-running comparison on the same
+            # fact pair creates a new record instead of silently reusing a
+            # stale one from a previous run.
+            id=f"relationship:{uuid4().hex}",
             source_fact_id=source_fact.id,
             target_fact_id=target_fact.id,
             relationship_type=relationship_type,

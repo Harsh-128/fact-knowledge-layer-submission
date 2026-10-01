@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import {
   Fact,
-  getFacts,
+  getFact,
   getRelationships,
   Relationship,
 } from '../api/client';
@@ -27,15 +27,24 @@ function RelationshipGraph() {
 
         setRelationships(relationshipResult);
 
-        const factResult = await getFacts({
-          limit: 100,
-          offset: 0,
-        });
+        // M-5: Collect the exact fact IDs referenced by loaded relationships
+        // and fetch only those, instead of fetching the first 100 facts and
+        // hoping the referenced ones happen to be in that window.
+        const neededIds = new Set<string>();
+        for (const rel of relationshipResult) {
+          neededIds.add(rel.source_fact_id);
+          neededIds.add(rel.target_fact_id);
+        }
+
+        const factEntries = await Promise.allSettled(
+          [...neededIds].map((id) => getFact(id)),
+        );
 
         const factMap: Record<string, Fact> = {};
-
-        for (const fact of factResult) {
-          factMap[fact.id] = fact;
+        for (const entry of factEntries) {
+          if (entry.status === 'fulfilled') {
+            factMap[entry.value.id] = entry.value;
+          }
         }
 
         setFacts(factMap);

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -66,7 +66,7 @@ class Relationship(BaseModel):
     )
 
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp when the relationship was created.",
     )
 

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -65,7 +65,7 @@ class Document(BaseModel):
     )
 
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp when the document record was created.",
     )
 
@@ -86,7 +86,7 @@ class Document(BaseModel):
 
         self.status = DocumentStatus.PROCESSED
         self.page_count = page_count
-        self.processed_at = datetime.utcnow()
+        self.processed_at = datetime.now(timezone.utc)
         self.error_message = None
 
     def mark_failed(self, error_message: str) -> None:

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
@@ -47,12 +47,12 @@ class FactType(BaseModel):
     )
 
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp when the fact type was created.",
     )
 
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp when the fact type was last updated.",
     )
 
@@ -69,4 +69,4 @@ class FactType(BaseModel):
 
         self.value_schema = value_schema
         self.version += 1
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)

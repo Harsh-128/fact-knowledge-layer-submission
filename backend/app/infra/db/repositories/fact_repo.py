@@ -242,16 +242,32 @@ class FactRepository:
     ) -> Fact:
         """Convert a database fact into the domain model."""
 
-        temporal_scope_data = orm_fact.temporal_scope or {}
+        # C-1: Only construct TemporalScope when the column is non-null/non-empty.
+        # An empty dict must also produce None so that comparison logic that
+        # checks `if fact.temporal_scope is not None` behaves correctly.
+        temporal_scope_data = orm_fact.temporal_scope
+        temporal_scope: TemporalScope | None
+        if temporal_scope_data:
+            try:
+                temporal_scope = TemporalScope(**temporal_scope_data)
+            except Exception:
+                temporal_scope = None
+        else:
+            temporal_scope = None
 
-        temporal_scope = TemporalScope(
-            **temporal_scope_data
-        )
-
-        evidence = [
-            EvidenceRef(**item)
-            for item in (orm_fact.evidence or [])
-        ]
+        # M-4: Guard against malformed JSONB evidence items so a single bad
+        # row does not crash every API call that touches facts.
+        evidence: list[EvidenceRef] = []
+        for item in (orm_fact.evidence or []):
+            try:
+                evidence.append(EvidenceRef(**item))
+            except Exception:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "Skipping malformed evidence item for fact %s: %r",
+                    orm_fact.id,
+                    item,
+                )
 
         return Fact(
             id=orm_fact.id,
