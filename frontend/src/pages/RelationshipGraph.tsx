@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 
 import {
+  Document,
   Fact,
   getFact,
+  getDocuments,
   getRelationships,
   Relationship,
 } from '../api/client';
@@ -11,8 +13,15 @@ import RelationshipBadge from '../components/RelationshipBadge';
 function RelationshipGraph() {
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [facts, setFacts] = useState<Record<string, Fact>>({});
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [selectedDocumentId, setSelectedDocumentId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Load document list for the filter dropdown
+  useEffect(() => {
+    getDocuments({ limit: 100 }).then(setDocuments).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const loadRelationships = async () => {
@@ -21,15 +30,13 @@ function RelationshipGraph() {
 
       try {
         const relationshipResult = await getRelationships({
+          document_id: selectedDocumentId || undefined,
           limit: 100,
           offset: 0,
         });
 
         setRelationships(relationshipResult);
 
-        // M-5: Collect the exact fact IDs referenced by loaded relationships
-        // and fetch only those, instead of fetching the first 100 facts and
-        // hoping the referenced ones happen to be in that window.
         const neededIds = new Set<string>();
         for (const rel of relationshipResult) {
           neededIds.add(rel.source_fact_id);
@@ -65,7 +72,7 @@ function RelationshipGraph() {
     };
 
     void loadRelationships();
-  }, []);
+  }, [selectedDocumentId]);
 
   return (
     <section className="relationship-graph">
@@ -78,6 +85,25 @@ function RelationshipGraph() {
           Inspect how extracted facts relate to one another across
           documents.
         </p>
+      </div>
+
+      {/* Document filter */}
+      <div className="fact-filters">
+        <div className="filter-field">
+          <label htmlFor="doc-filter">Filter by document</label>
+          <select
+            id="doc-filter"
+            value={selectedDocumentId}
+            onChange={(e) => setSelectedDocumentId(e.target.value)}
+          >
+            <option value="">All documents</option>
+            {documents.map((doc) => (
+              <option key={doc.id} value={doc.id}>
+                {doc.filename.replace(/^document:[a-f0-9]+_/, '')}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="relationship-summary">

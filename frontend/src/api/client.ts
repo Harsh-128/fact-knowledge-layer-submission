@@ -158,6 +158,7 @@ interface RelationshipListResponse {
 export async function getRelationships(params?: {
   fact_id?: string;
   relationship_type?: string;
+  document_id?: string;
   limit?: number;
   offset?: number;
 }): Promise<Relationship[]> {
@@ -176,5 +177,21 @@ export async function getRelationship(
     `/relationships/${encodeURIComponent(relationshipId)}`,
   );
 
+  return response.data;
+}
+
+export interface CompareResponse {
+  document_ids: string[];
+  facts_considered: number;
+  relationships_created: number;
+  relationships: Relationship[];
+}
+
+export async function compareDocuments(
+  documentIds: string[],
+): Promise<CompareResponse> {
+  const response = await apiClient.post<CompareResponse>('/compare', {
+    document_ids: documentIds,
+  });
   return response.data;
 }

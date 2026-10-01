@@ -126,11 +126,14 @@ class IngestionService:
         *,
         content_type: str = "application/pdf",
         document_id: str | None = None,
+        original_filename: str | None = None,
     ) -> IngestionResult:
         """
         Ingest a PDF directly from an existing local path.
 
-        This is useful for CLI processing and development.
+        original_filename overrides the path's basename so the stored
+        document always shows the user's original upload name, not the
+        internal temp file name (which includes the document ID prefix).
         """
 
         path = Path(file_path)
@@ -152,9 +155,14 @@ class IngestionService:
                 f"Unable to read input file: {exc}"
             ) from exc
 
+        # Use the caller-supplied original filename when available so the
+        # stored document record shows the clean name the user uploaded,
+        # not the internal temp path which includes the document ID prefix.
+        filename = original_filename or path.name
+
         return self.ingest(
             content=content,
-            filename=path.name,
+            filename=filename,
             content_type=content_type,
             document_id=document_id,
         )

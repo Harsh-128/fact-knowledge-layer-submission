@@ -4,6 +4,7 @@ import DocumentView from './pages/DocumentView';
 import FactExplorer from './pages/FactExplorer';
 import RelationshipGraph from './pages/RelationshipGraph';
 import UploadPage from './pages/UploadPage';
+import ComparePage from './pages/ComparePage';
 
 import './App.css';
 
@@ -11,13 +12,15 @@ type Page =
   | 'upload'
   | 'facts'
   | 'document'
-  | 'relationships';
+  | 'relationships'
+  | 'compare';
 
 const navigation: { id: Page; label: string }[] = [
   { id: 'upload', label: 'Upload' },
   { id: 'facts', label: 'Fact Explorer' },
   { id: 'document', label: 'Document View' },
   { id: 'relationships', label: 'Relationships' },
+  { id: 'compare', label: 'Compare' },
 ];
 
 function App() {
@@ -65,6 +68,9 @@ function App() {
 
       case 'relationships':
         return <RelationshipGraph />;
+
+      case 'compare':
+        return <ComparePage />;
 
       default:
         return <UploadPage />;

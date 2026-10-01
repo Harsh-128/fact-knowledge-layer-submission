@@ -29,6 +29,7 @@ def ingest_document_task(
     self,
     file_path: str,
     document_id: str | None = None,
+    original_filename: str | None = None,
 ) -> dict:
     """
     Process a PDF asynchronously and persist its document/chunks.
@@ -125,6 +126,7 @@ def ingest_document_task(
         result = ingestion_service.ingest_file(
             file_path,
             document_id=document_id,
+            original_filename=original_filename,
         )
 
         persisted_document = document_repository.create(

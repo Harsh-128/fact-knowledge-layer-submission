@@ -118,6 +118,7 @@ async def upload_document(
         task = ingest_document_task.delay(
             str(temporary_path),
             document_id=document_id,
+            original_filename=filename,
         )
 
     except Exception as exc:
