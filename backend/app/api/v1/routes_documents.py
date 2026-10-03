@@ -235,21 +235,21 @@ async def upload_document(
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     document_id = f"document:{uuid4().hex}"
-    temporary_path = upload_dir / f"{document_id}_{filename}"
 
     try:
-        temporary_path.write_bytes(content)
+        # Pass content as base64 directly to the Celery task so the worker
+        # does not need access to the API container's filesystem.
+        import base64
+        content_b64 = base64.b64encode(content).decode("utf-8")
 
         task = ingest_document_task.delay(
-            str(temporary_path),
+            None,  # file_path not used in cloud mode
             document_id=document_id,
             original_filename=filename,
+            content_b64=content_b64,
         )
 
     except Exception as exc:
-        if temporary_path.exists():
-            temporary_path.unlink()
-
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to queue document ingestion: {exc}",

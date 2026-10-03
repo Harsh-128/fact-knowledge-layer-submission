@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import tempfile
 from pathlib import Path
 
 from app.core.logging import get_logger
@@ -19,75 +21,85 @@ logger = get_logger(__name__)
 @celery_app.task(
     bind=True,
     name="documents.ingest",
-    # M-3: Only retry on transient I/O and connection errors.
-    # Permanent failures (corrupt PDF, wrong file type) must not be retried.
-    autoretry_for=(ConnectionError, TimeoutError, OSError),
+    autoretry_for=(ConnectionError, TimeoutError),
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
 )
 def ingest_document_task(
     self,
-    file_path: str,
+    file_path: str | None = None,
     document_id: str | None = None,
     original_filename: str | None = None,
+    content_b64: str | None = None,
 ) -> dict:
     """
     Process a PDF asynchronously and persist its document/chunks.
 
-    Duplicate PDFs are detected using SHA-256 before creating a new
-    document record.
+    Supports two modes:
+    - content_b64: PDF bytes encoded as base64 (cloud/multi-container mode)
+    - file_path: path to a local file (local dev mode)
     """
 
     db = SessionLocal()
-    temporary_path = Path(file_path)
 
     try:
-        logger.info(
-            "Starting document ingestion: file=%s document_id=%s",
-            file_path,
-            document_id,
-        )
-
-        if not temporary_path.exists():
-            raise FileNotFoundError(
-                f"Uploaded file no longer exists: {file_path}"
+        # ── Resolve PDF bytes ─────────────────────────────────────────────
+        if content_b64:
+            # Cloud mode: content passed directly via Redis/Celery message.
+            logger.info(
+                "Starting document ingestion (base64 mode): document_id=%s filename=%s",
+                document_id,
+                original_filename,
             )
+            content = base64.b64decode(content_b64)
+
+            # Write to a temp file so IngestionService can parse it with PyMuPDF.
+            suffix = Path(original_filename or "upload.pdf").suffix or ".pdf"
+            tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+            tmp.write(content)
+            tmp.flush()
+            tmp.close()
+            temporary_path = Path(tmp.name)
+            cleanup_temp = True
+
+        elif file_path:
+            # Local dev mode: file already on disk.
+            logger.info(
+                "Starting document ingestion (file mode): file=%s document_id=%s",
+                file_path,
+                document_id,
+            )
+            temporary_path = Path(file_path)
+            cleanup_temp = False
+
+            if not temporary_path.exists():
+                raise FileNotFoundError(
+                    f"Uploaded file no longer exists: {file_path}"
+                )
+
+            with temporary_path.open("rb") as f:
+                content = f.read()
+        else:
+            raise ValueError("Either file_path or content_b64 must be provided.")
 
         document_repository = DocumentRepository(db)
         chunk_repository = ChunkRepository(db)
 
-        # M-1: Removed dead hasattr(_calculate_sha256) branch.
-        # Always use the inline hashlib implementation.
-        digest = hashlib.sha256()
-        with temporary_path.open("rb") as file:
-            for block in iter(lambda: file.read(1024 * 1024), b""):
-                digest.update(block)
-        file_sha256 = digest.hexdigest()
+        # SHA-256 deduplication
+        file_sha256 = hashlib.sha256(content).hexdigest()
 
-        # Reuse an already-ingested document instead of violating the
-        # documents.sha256 unique constraint.
-        existing_document = document_repository.get_by_sha256(
-            file_sha256
-        )
+        existing_document = document_repository.get_by_sha256(file_sha256)
 
         if existing_document is not None:
-            existing_chunks = chunk_repository.get_by_document(
-                existing_document.id
-            )
-
+            existing_chunks = chunk_repository.get_by_document(existing_document.id)
             logger.info(
                 "Duplicate document detected: sha256=%s existing_document_id=%s",
                 file_sha256,
                 existing_document.id,
             )
-
             extract_facts_task.delay(existing_document.id)
-
-            # The temporary upload is no longer needed because the document
-            # already exists in the database.
-            if temporary_path.exists():
+            if cleanup_temp and temporary_path.exists():
                 temporary_path.unlink(missing_ok=True)
-
             return {
                 "document_id": existing_document.id,
                 "filename": existing_document.filename,
@@ -97,10 +109,7 @@ def ingest_document_task(
                 "sha256": existing_document.sha256,
             }
 
-        # M-7: Guard against redundant re-ingestion on Celery retry.
-        # If the document was already created (commit succeeded before the
-        # Celery broker call failed), skip ingestion and only re-dispatch
-        # the extraction task.
+        # Idempotency guard on retry
         if document_id is not None:
             already_ingested = document_repository.get_by_id(document_id)
             if already_ingested is not None:
@@ -110,7 +119,7 @@ def ingest_document_task(
                     document_id,
                 )
                 extract_facts_task.delay(already_ingested.id)
-                if temporary_path.exists():
+                if cleanup_temp and temporary_path.exists():
                     temporary_path.unlink(missing_ok=True)
                 return {
                     "document_id": already_ingested.id,
@@ -124,24 +133,16 @@ def ingest_document_task(
         ingestion_service = IngestionService()
 
         result = ingestion_service.ingest_file(
-            file_path,
+            temporary_path,
             document_id=document_id,
             original_filename=original_filename,
         )
 
-        persisted_document = document_repository.create(
-            result.document
-        )
-
-        persisted_chunks = chunk_repository.create_many(
-            result.chunks
-        )
-
+        persisted_document = document_repository.create(result.document)
+        persisted_chunks = chunk_repository.create_many(result.chunks)
         db.commit()
 
-        # C-4: Delete the temporary upload file after a successful ingestion.
-        # The ingestion service has already saved a permanent copy to storage.
-        if temporary_path.exists():
+        if cleanup_temp and temporary_path.exists():
             temporary_path.unlink(missing_ok=True)
 
         extract_facts_task.delay(persisted_document.id)
@@ -164,12 +165,9 @@ def ingest_document_task(
         }
 
     except (UnsupportedDocumentError, FileNotFoundError, ValueError) as exc:
-        # M-3: Permanent failures — do not retry, just log and re-raise so
-        # Celery marks the task as FAILURE immediately.
         db.rollback()
         logger.error(
-            "Document ingestion permanent failure: file=%s document_id=%s error=%s",
-            file_path,
+            "Document ingestion permanent failure: document_id=%s error=%s",
             document_id,
             exc,
         )
@@ -177,13 +175,10 @@ def ingest_document_task(
 
     except Exception:
         db.rollback()
-
         logger.exception(
-            "Document ingestion failed: file=%s document_id=%s",
-            file_path,
+            "Document ingestion failed: document_id=%s",
             document_id,
         )
-
         raise
 
     finally:
