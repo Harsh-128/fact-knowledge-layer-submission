@@ -107,10 +107,16 @@ class Settings(BaseSettings):
 
         Render / cloud platforms inject REDIS_URL as a redis:// or
         rediss:// URL. Read directly from os.environ to avoid pydantic
-        field conflicts.
+        field conflicts. For rediss:// (TLS) URLs, append SSL options
+        so Celery/Kombu can connect without certificate verification.
         """
         raw = os.environ.get("REDIS_URL", "").strip()
         if raw:
+            # Upstash uses rediss:// (TLS). Celery needs ssl_cert_reqs=none
+            # appended as a query parameter to avoid SSL verification errors.
+            if raw.startswith("rediss://") and "ssl_cert_reqs" not in raw:
+                separator = "&" if "?" in raw else "?"
+                raw = f"{raw}{separator}ssl_cert_reqs=none"
             return raw
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
