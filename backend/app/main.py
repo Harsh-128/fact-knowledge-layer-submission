@@ -1,10 +1,12 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.routes_documents import router as documents_router
 from app.api.v1.routes_facts import router as facts_router
 from app.api.v1.routes_jobs import router as jobs_router
 from app.api.v1.routes_relationships import router as relationships_router
-from app.api.v1.routes_schema import router as schema_router  # C-3: was never registered
+from app.api.v1.routes_schema import router as schema_router
 from app.api.v1.routes_compare import router as compare_router
 from app.api.v1.routes_entities import router as entities_router
 from app.api.v1.routes_analytics import router as analytics_router
@@ -24,13 +26,19 @@ app = FastAPI(
     ),
 )
 
+# Build CORS origins list.
+# ALLOWED_ORIGINS env var accepts comma-separated URLs (set on Railway/Vercel).
+_default_origins = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+]
+_extra = os.environ.get("ALLOWED_ORIGINS", "")
+_extra_origins = [o.strip() for o in _extra.split(",") if o.strip()]
+_allowed_origins = _default_origins + _extra_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
-        "https://fact-knowledge-layer-frontend.onrender.com",
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,0 +1,24 @@
+[build]
+builder = "dockerfile"
+
+# ── API service ───────────────────────────────────────────────────────────────
+[services.api]
+dockerfile = "backend/Dockerfile"
+buildContext = "backend"
+
+[services.api.deploy]
+startCommand = "sh -c 'alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT'"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# ── Celery worker service ─────────────────────────────────────────────────────
+[services.worker]
+dockerfile = "backend/Dockerfile.celery"
+buildContext = "backend"
+
+[services.worker.deploy]
+startCommand = "celery -A app.workers.celery_app:celery_app worker --loglevel=info --concurrency=2"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

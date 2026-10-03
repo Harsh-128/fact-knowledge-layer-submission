@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+# Same system dependencies as the API
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmupdf-dev \
+    libfreetype6-dev \
+    libharfbuzz-dev \
+    libjpeg-dev \
+    libopenjp2-7-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY pyproject.toml ./
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -e "."
+
+COPY . .
+
+RUN mkdir -p ./storage/uploads
+
+# Celery worker — no --pool=solo needed on Linux
+CMD ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "--loglevel=info", "--concurrency=2"]

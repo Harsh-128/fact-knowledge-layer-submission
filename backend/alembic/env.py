@@ -9,8 +9,8 @@ from app.infra.db.models_orm import Base
 # Alembic Config object.
 config = context.config
 
-# Use our application database URL.
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Use our application database URL — supports Railway DATABASE_URL env var.
+config.set_main_option("sqlalchemy.url", settings.get_database_url())
 
 # Configure Python logging from alembic.ini.
 if config.config_file_name is not None:
@@ -24,7 +24,7 @@ def run_migrations_offline() -> None:
     """
     Run migrations without creating a database connection.
     """
-    url = settings.database_url
+    url = settings.get_database_url()
 
     context.configure(
         url=url,
@@ -44,7 +44,7 @@ def run_migrations_online() -> None:
     """
     connectable = engine_from_config(
         {
-            "sqlalchemy.url": settings.database_url,
+            "sqlalchemy.url": settings.get_database_url(),
         },
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,

@@ -7,7 +7,7 @@ from app.config import settings
 
 
 engine = create_engine(
-    settings.database_url,
+    settings.get_database_url(),
     pool_pre_ping=True,
     future=True,
 )
