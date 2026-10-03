@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
@@ -10,6 +10,9 @@ engine = create_engine(
     settings.get_database_url(),
     pool_pre_ping=True,
     future=True,
+    # Supabase transaction pooler (pgBouncer on port 6543) does not support
+    # prepared statements. Disable them at the psycopg3 driver level.
+    connect_args={"prepare_threshold": None},
 )
 
 SessionLocal = sessionmaker(

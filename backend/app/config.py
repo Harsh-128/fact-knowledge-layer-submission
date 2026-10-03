@@ -91,11 +91,6 @@ class Settings(BaseSettings):
             ):
                 if raw.startswith(prefix):
                     base = "postgresql+psycopg://" + raw[len(prefix):]
-                    # Supabase transaction pooler (port 6543) does not support
-                    # prepared statements — disable them explicitly.
-                    if "prepared_statement_cache_size" not in base:
-                        sep = "&" if "?" in base else "?"
-                        base = f"{base}{sep}prepared_statement_cache_size=0"
                     return base
             return raw
 
