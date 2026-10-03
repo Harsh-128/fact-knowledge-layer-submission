@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# Same system dependencies as the API
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libmupdf-dev \
     libfreetype6-dev \
@@ -21,5 +20,7 @@ COPY . .
 
 RUN mkdir -p ./storage/uploads
 
-# Celery worker — no --pool=solo needed on Linux
-CMD ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+# worker_main.py starts both:
+# 1. A tiny HTTP health server (satisfies Render's port requirement)
+# 2. The Celery worker (processes PDF tasks)
+CMD ["python", "worker_main.py"]
