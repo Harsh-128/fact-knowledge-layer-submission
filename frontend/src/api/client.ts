@@ -8,7 +8,9 @@ export const apiClient = axios.create({
   headers: {
     Accept: 'application/json',
   },
-  timeout: 30_000,
+  // Render free tier can take up to 50s to wake from sleep.
+  // Use 120s timeout so the first cold-start request doesn't fail.
+  timeout: 120_000,
 });
 
 export interface DocumentUploadResponse {
