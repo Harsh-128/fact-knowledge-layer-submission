@@ -12,9 +12,10 @@ class Settings(BaseSettings):
     Application configuration loaded from environment variables
     and an optional .env file.
 
-    Railway deployment injects DATABASE_URL and REDIS_URL as single
-    connection strings. Those take priority over the individual
-    host/port/user/password fields when present.
+    Cloud platforms (Render, Railway) inject DATABASE_URL and REDIS_URL
+    as single connection strings. Use CLOUD_DATABASE_URL and
+    CLOUD_REDIS_URL to avoid naming conflicts with pydantic-settings.
+    Both raw names are also read directly from os.environ as a fallback.
     """
 
     # API key for protecting endpoints (optional; leave empty to disable auth)
@@ -36,16 +37,10 @@ class Settings(BaseSettings):
     postgres_user: str = "fact_user"
     postgres_password: str = "fact_password"
 
-    # Database — Railway / cloud single URL (takes priority when set)
-    database_url: str = Field(default="")
-
     # Redis — individual fields (local dev)
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0
-
-    # Redis — Railway / cloud single URL (takes priority when set)
-    redis_url: str = Field(default="")
 
     # LLM Provider
     llm_provider: str = "ollama"
@@ -81,15 +76,13 @@ class Settings(BaseSettings):
         """
         Return the SQLAlchemy-compatible PostgreSQL connection URL.
 
-        Railway injects DATABASE_URL as a postgres:// or postgresql://
-        URL. SQLAlchemy requires the psycopg3 driver prefix
-        (postgresql+psycopg://). This method normalises both forms.
+        Render / cloud platforms inject DATABASE_URL as a postgres:// URL.
+        SQLAlchemy requires the psycopg3 driver prefix (postgresql+psycopg://).
         """
-        # 1. Prefer the single DATABASE_URL env var (Railway / cloud).
-        raw = self.database_url or os.environ.get("DATABASE_URL", "")
+        # Read directly from os.environ to avoid pydantic field name conflicts.
+        raw = os.environ.get("DATABASE_URL", "").strip()
 
         if raw:
-            # Replace any of the common prefixes with the psycopg3 driver prefix.
             for prefix in (
                 "postgresql+psycopg2://",
                 "postgresql+psycopg://",
@@ -100,7 +93,7 @@ class Settings(BaseSettings):
                     return "postgresql+psycopg://" + raw[len(prefix):]
             return raw
 
-        # 2. Fall back to individual host/port/user/password fields (local dev).
+        # Fall back to individual host/port/user/password fields (local dev).
         return (
             f"postgresql+psycopg://"
             f"{self.postgres_user}:{self.postgres_password}"
@@ -112,10 +105,11 @@ class Settings(BaseSettings):
         """
         Return the Redis connection URL.
 
-        Railway injects REDIS_URL as a redis:// URL. This method
-        returns that directly, or falls back to the individual fields.
+        Render / cloud platforms inject REDIS_URL as a redis:// or
+        rediss:// URL. Read directly from os.environ to avoid pydantic
+        field conflicts.
         """
-        raw = self.redis_url or os.environ.get("REDIS_URL", "")
+        raw = os.environ.get("REDIS_URL", "").strip()
         if raw:
             return raw
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
@@ -133,9 +127,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """
-    Return a cached application settings instance.
-    """
+    """Return a cached application settings instance."""
     return Settings()
 
 
