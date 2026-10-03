@@ -1,0 +1,49 @@
+services:
+  # ── FastAPI web service ───────────────────────────────────────────────────
+  - type: web
+    name: fact-knowledge-layer-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: UPLOAD_DIR
+        value: ./storage/uploads
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "50"
+      # Set these in Render dashboard (secret values):
+      # DATABASE_URL  — from Supabase
+      # REDIS_URL     — from Upstash
+      # GEMINI_API_KEY
+      # ALLOWED_ORIGINS — your Vercel URL
+
+  # ── Celery worker (background worker) ────────────────────────────────────
+  - type: worker
+    name: fact-knowledge-layer-worker
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile.celery
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: UPLOAD_DIR
+        value: ./storage/uploads
+      # Set these in Render dashboard (secret values):
+      # DATABASE_URL  — from Supabase
+      # REDIS_URL     — from Upstash
+      # GEMINI_API_KEY

@@ -1,133 +1,182 @@
-# Deployment Guide
+# Deployment Guide — Fully Free Stack
 
-This guide deploys the Fact Knowledge Layer to:
+Deploy the Fact Knowledge Layer for **$0** with no expiry using:
 
-- **Railway** — PostgreSQL, Redis, FastAPI API, Celery worker
-- **Vercel** — React frontend
+| Service | Platform | Free limits |
+|---|---|---|
+| PostgreSQL + pgvector | **Supabase** | 500 MB, never expires |
+| Redis (Celery broker) | **Upstash** | 500K commands/month, never expires |
+| FastAPI API | **Render** | 750 hrs/month, free forever |
+| Celery worker | **Render** | Free background worker |
+| React frontend | **Vercel** | Unlimited, free forever |
+| LLM inference | **Gemini API** | 500 req/day free, no credit card |
 
-Total cost: **$0** on free tiers for normal usage.
+**Total cost: $0 — works for 3–4 months and beyond.**
+
+> ⚠️ One limitation: Render free web services **sleep after 15 minutes of inactivity**. The first request after idle takes ~30 seconds to wake up. This is fine for a demo or portfolio app.
+
+---
+
+## Overview — what you'll do
+
+```
+Step 1  →  Supabase   (PostgreSQL + pgvector database)
+Step 2  →  Upstash    (Redis for Celery)
+Step 3  →  Render     (FastAPI API + Celery worker)
+Step 4  →  Vercel     (React frontend)
+Step 5  →  Wire it up (set env vars, CORS)
+```
 
 ---
 
 ## Prerequisites
 
-- GitHub account (repo already pushed)
-- Railway account — sign up at https://railway.app (free)
-- Vercel account — sign up at https://vercel.com (free)
-- Gemini API key — get one free at https://aistudio.google.com/apikey
+- GitHub account (repo already pushed ✅)
+- Gemini API key — get free at https://aistudio.google.com/apikey
+- Supabase account — sign up at https://supabase.com (free, no card)
+- Upstash account — sign up at https://upstash.com (free, no card)
+- Render account — sign up at https://render.com (free, no card)
+- Vercel account — sign up at https://vercel.com (free, no card)
 
 ---
 
-## Part 1 — Railway (Backend)
+## Part 1 — Supabase (PostgreSQL + pgvector)
 
-### Step 1 — Create a new Railway project
+### 1.1 Create a project
 
-1. Go to https://railway.app
-2. Click **New Project**
-3. Choose **Deploy from GitHub repo**
-4. Select `fact-knowledge-layer-submission`
+1. Go to https://supabase.com → **New project**
+2. Choose a name: `fact-knowledge-layer`
+3. Set a strong database password — **save it**, you'll need it
+4. Choose the **free** plan
+5. Pick the region closest to you
+6. Click **Create new project** (takes ~2 minutes)
+
+### 1.2 Enable pgvector
+
+1. In your Supabase project go to **SQL Editor**
+2. Run this query:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+3. Click **Run** — you should see `Success`
+
+### 1.3 Get the connection string
+
+1. Go to **Project Settings → Database**
+2. Scroll to **Connection string → URI**
+3. Select **Transaction pooler** mode (port 6543)
+4. Copy the URI — it looks like:
+
+```
+postgresql://postgres.xxxxx:YOUR_PASSWORD@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
+```
+
+5. **Replace `[YOUR-PASSWORD]` with your actual password**
+6. Save this — it's your `DATABASE_URL`
 
 ---
 
-### Step 2 — Add PostgreSQL with pgvector
+## Part 2 — Upstash (Redis)
 
-1. In your Railway project click **+ New**
-2. Choose **Database → PostgreSQL**
-3. Wait for it to provision (1-2 minutes)
-4. Click the PostgreSQL service → **Variables** tab
-5. Note the `DATABASE_URL` — Railway will inject this automatically
+### 2.1 Create a Redis database
 
-> **Important:** Railway's PostgreSQL has pgvector available. The migration will run `CREATE EXTENSION IF NOT EXISTS vector` automatically on first deploy.
+1. Go to https://console.upstash.com → **Create database**
+2. Name: `fact-layer-redis`
+3. Type: **Regional** (not Global — simpler and free)
+4. Region: pick one close to your Render region
+5. Click **Create**
+
+### 2.2 Get the connection URL
+
+1. Click your database → **Details** tab
+2. Copy **REDIS_URL** — it looks like:
+
+```
+rediss://default:YOUR_PASSWORD@your-host.upstash.io:6380
+```
+
+Save this — it's your `REDIS_URL`.
 
 ---
 
-### Step 3 — Add Redis
+## Part 3 — Render (FastAPI + Celery)
 
-1. Click **+ New → Database → Redis**
-2. Wait for it to provision
-3. Note the `REDIS_URL` — Railway will inject this automatically
+### 3.1 Deploy the API service
 
----
-
-### Step 4 — Deploy the FastAPI service
-
-1. Click **+ New → GitHub Repo → fact-knowledge-layer-submission**
-2. Railway will detect the `railway.toml` and offer two services: `api` and `worker`
-3. Select **api** first
-4. Go to **Settings → Build** and set:
+1. Go to https://render.com → **New + → Web Service**
+2. Connect your GitHub account and select `fact-knowledge-layer-submission`
+3. Configure:
+   - **Name:** `fact-knowledge-layer-api`
    - **Root directory:** `backend`
-   - **Dockerfile path:** `Dockerfile`
-5. Go to **Variables** and add:
+   - **Runtime:** Docker
+   - **Dockerfile path:** `./Dockerfile`
+   - **Plan:** Free
 
-```
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=your_gemini_key_here
-GEMINI_MODEL=gemini-3.5-flash-lite
-ENVIRONMENT=production
-DEBUG=false
-UPLOAD_DIR=./storage/uploads
-MAX_UPLOAD_SIZE_MB=50
-ALLOWED_ORIGINS=https://your-app.vercel.app
-```
+4. Click **Advanced** → add these **Environment Variables**:
 
-> Leave `DATABASE_URL` and `REDIS_URL` blank — Railway injects them automatically from the database services.
+| Key | Value |
+|---|---|
+| `DATABASE_URL` | Your Supabase connection string |
+| `REDIS_URL` | Your Upstash Redis URL |
+| `LLM_PROVIDER` | `gemini` |
+| `GEMINI_API_KEY` | Your Gemini API key |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` |
+| `ENVIRONMENT` | `production` |
+| `DEBUG` | `false` |
+| `UPLOAD_DIR` | `./storage/uploads` |
+| `MAX_UPLOAD_SIZE_MB` | `50` |
+| `ALLOWED_ORIGINS` | *(leave blank for now — fill in after Vercel deploy)* |
 
-6. Click **Deploy**
+5. Click **Create Web Service**
+6. Wait for the build (~5 minutes) — watch the logs
+7. Note your API URL: `https://fact-knowledge-layer-api.onrender.com`
 
----
+> The first deploy runs `alembic upgrade head` automatically, creating all tables.
 
-### Step 5 — Deploy the Celery worker
+### 3.2 Deploy the Celery worker
 
-1. Click **+ New → GitHub Repo → fact-knowledge-layer-submission** again
-2. This time set:
+1. Go to **New + → Background Worker**
+2. Same repo: `fact-knowledge-layer-submission`
+3. Configure:
+   - **Name:** `fact-knowledge-layer-worker`
    - **Root directory:** `backend`
-   - **Dockerfile path:** `Dockerfile.celery`
-3. Add the **same environment variables** as the API service above
-4. Click **Deploy**
+   - **Runtime:** Docker
+   - **Dockerfile path:** `./Dockerfile.celery`
+   - **Plan:** Free
+
+4. Add the **same environment variables** as the API service above (DATABASE_URL, REDIS_URL, GEMINI_API_KEY, etc.)
+5. Click **Create Background Worker**
+6. Wait for the build — you should see `celery@hostname ready` in the logs
 
 ---
 
-### Step 6 — Note your API URL
+## Part 4 — Vercel (Frontend)
 
-Once the API service is running, Railway gives you a public URL like:
-```
-https://fact-knowledge-layer-api-production.up.railway.app
-```
+### 4.1 Import the project
 
-Copy this — you'll need it for the frontend.
-
----
-
-## Part 2 — Vercel (Frontend)
-
-### Step 1 — Import the project
-
-1. Go to https://vercel.com
-2. Click **Add New → Project**
-3. Import `fact-knowledge-layer-submission` from GitHub
-4. Set:
+1. Go to https://vercel.com → **Add New → Project**
+2. Import `fact-knowledge-layer-submission` from GitHub
+3. Configure:
    - **Root directory:** `frontend`
-   - **Framework preset:** Vite (auto-detected)
+   - **Framework preset:** Vite *(auto-detected)*
    - **Build command:** `npm run build`
    - **Output directory:** `dist`
 
----
+### 4.2 Add environment variable
 
-### Step 2 — Set environment variables
+Under **Environment Variables** add:
 
-In Vercel project settings → **Environment Variables** add:
+| Key | Value |
+|---|---|
+| `VITE_API_BASE_URL` | `https://fact-knowledge-layer-api.onrender.com/api/v1` |
 
-```
-VITE_API_BASE_URL=https://your-railway-api-url.up.railway.app/api/v1
-```
+*(Replace with your actual Render API URL)*
 
-Replace the URL with your actual Railway API URL from Part 1 Step 6.
+### 4.3 Deploy
 
----
-
-### Step 3 — Deploy
-
-Click **Deploy**. Vercel builds and deploys automatically in ~2 minutes.
+Click **Deploy** — Vercel builds in ~2 minutes.
 
 You'll get a URL like:
 ```
@@ -136,89 +185,110 @@ https://fact-knowledge-layer-submission.vercel.app
 
 ---
 
-### Step 4 — Update CORS on Railway
+## Part 5 — Wire everything together
 
-Go back to Railway → API service → **Variables** and update:
+### 5.1 Update CORS on Render
 
-```
-ALLOWED_ORIGINS=https://fact-knowledge-layer-submission.vercel.app
-```
+Go back to your Render **API service → Environment** and update:
 
-Redeploy the API service (Railway redeploys automatically on variable changes).
+| Key | Value |
+|---|---|
+| `ALLOWED_ORIGINS` | `https://fact-knowledge-layer-submission.vercel.app` |
 
----
+Render redeploys automatically after saving.
 
-## Part 3 — Verify deployment
+### 5.2 Verify everything works
 
-Open your Vercel URL and check each part works:
+1. **Health check** — open:
+   ```
+   https://fact-knowledge-layer-api.onrender.com/health
+   ```
+   Should return: `{"status":"ok","service":"Fact Knowledge Layer",...}`
 
-1. **Health check** — visit `https://your-railway-url.up.railway.app/health` → should return `{"status":"ok"}`
-2. **API docs** — visit `https://your-railway-url.up.railway.app/docs` → should show Swagger UI
-3. **Upload a PDF** — go to the frontend Upload tab, upload a small PDF
-4. **Check Celery** — watch Railway logs for the worker service → should show extraction tasks running
-5. **Fact Explorer** — after processing, check facts appear
+2. **API docs** — open:
+   ```
+   https://fact-knowledge-layer-api.onrender.com/docs
+   ```
+   Should show the Swagger UI with all endpoints.
+
+3. **Frontend** — open your Vercel URL and upload a small PDF.
+
+4. **Worker logs** — check Render → Background Worker logs for:
+   ```
+   celery@hostname ready.
+   ```
+
+5. **After upload** — check the worker logs for extraction tasks running.
 
 ---
 
 ## Environment variables reference
 
-### Required for production
+### Render API + Worker services
 
-| Variable | Description | Example |
+| Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL connection string (auto-injected by Railway) | `postgresql://user:pass@host/db` |
-| `REDIS_URL` | Redis connection string (auto-injected by Railway) | `redis://default:pass@host:6379` |
-| `LLM_PROVIDER` | LLM backend to use | `gemini` |
-| `GEMINI_API_KEY` | Your Gemini API key | `AIzaSy...` |
-| `GEMINI_MODEL` | Gemini model name | `gemini-3.5-flash-lite` |
-| `ALLOWED_ORIGINS` | Comma-separated frontend URLs for CORS | `https://yourapp.vercel.app` |
+| `DATABASE_URL` | ✅ | Supabase PostgreSQL connection string |
+| `REDIS_URL` | ✅ | Upstash Redis connection URL |
+| `LLM_PROVIDER` | ✅ | `gemini` |
+| `GEMINI_API_KEY` | ✅ | Your Gemini API key |
+| `GEMINI_MODEL` | ✅ | `gemini-3.5-flash-lite` |
+| `ALLOWED_ORIGINS` | ✅ | Your Vercel frontend URL |
+| `ENVIRONMENT` | ✅ | `production` |
+| `DEBUG` | ✅ | `false` |
+| `UPLOAD_DIR` | optional | `./storage/uploads` |
+| `MAX_UPLOAD_SIZE_MB` | optional | `50` |
+| `API_KEY` | optional | Set to protect all endpoints with a key |
 
-### Optional
+### Vercel frontend
 
-| Variable | Default | Description |
+| Variable | Required | Description |
 |---|---|---|
-| `ENVIRONMENT` | `development` | Set to `production` on Railway |
-| `DEBUG` | `true` | Set to `false` on Railway |
-| `UPLOAD_DIR` | `./storage/uploads` | Where uploaded PDFs are stored |
-| `MAX_UPLOAD_SIZE_MB` | `50` | Maximum PDF upload size |
-| `API_KEY` | `` (empty) | Optional API key to protect all endpoints |
-
-### Frontend (Vercel)
-
-| Variable | Description |
-|---|---|
-| `VITE_API_BASE_URL` | Full Railway API URL including `/api/v1` |
+| `VITE_API_BASE_URL` | ✅ | Full Render API URL + `/api/v1` |
 
 ---
 
 ## Troubleshooting
 
+### Build fails on Render: "mupdf not found"
+The Dockerfile installs `libmupdf-dev`. If Render can't find it, make sure the **Dockerfile path** is set to `./Dockerfile` and **Root directory** is `backend`.
+
 ### "pgvector type does not exist"
-The migration must run `CREATE EXTENSION IF NOT EXISTS vector`. This is already in the migration file. Make sure the Dockerfile CMD runs `alembic upgrade head` before starting uvicorn.
+You need to run `CREATE EXTENSION IF NOT EXISTS vector;` in Supabase SQL Editor first (Part 1.2 above).
 
-### "Connection refused" on API start
-Railway takes ~30 seconds to provision PostgreSQL. The `pool_pre_ping=True` setting in SQLAlchemy will retry. If it keeps failing, check `DATABASE_URL` is correctly set.
+### API returns 500 on first request after deploy
+The migration may not have run yet. Check Render API logs for `alembic upgrade head`. If it failed, re-deploy the API service.
 
-### Celery worker not picking up tasks
-Check that both the API and worker services have the **same** `REDIS_URL`. If Railway injected different Redis URLs, manually copy the exact same value to both.
+### CORS error in browser console
+Make sure `ALLOWED_ORIGINS` on Render exactly matches your Vercel URL — no trailing slash, must be `https://`.
 
-### CORS errors in browser
-Make sure `ALLOWED_ORIGINS` on Railway exactly matches your Vercel URL (no trailing slash, correct https).
+### Celery worker not processing tasks
+Make sure both the API and worker have the **exact same** `REDIS_URL`. If they differ, tasks get queued on one broker and the worker listens on another.
 
-### Gemini 429 rate limit during deployment test
-The free tier allows 500 requests/day. Large PDFs can exhaust this. Wait until the quota resets at midnight Pacific time, or use a different Google account's API key.
+### Supabase "project paused" after 7 days
+Supabase pauses free projects after 7 days with no activity. Just visit your Supabase dashboard and click **Restore project** — takes 30 seconds. To avoid this, make sure you use the app at least once a week, or set up a free cron job at https://cron-job.org to ping `https://your-api.onrender.com/health` every 6 days.
+
+### Render API cold start takes 30 seconds
+This is normal for the free tier. The service sleeps after 15 minutes of no traffic. To reduce this, use the same cron-job.org trick — ping the `/health` endpoint every 14 minutes to keep it awake.
+
+**Free keep-alive setup:**
+1. Go to https://cron-job.org → sign up free
+2. Create a cron job:
+   - URL: `https://your-api.onrender.com/health`
+   - Schedule: every 14 minutes
+3. This keeps your API awake 24/7 for free
 
 ---
 
-## Cost summary
+## Free tier limits summary
 
-| Service | Free tier |
-|---|---|
-| Railway PostgreSQL | 500MB storage, 1GB RAM |
-| Railway Redis | 25MB |
-| Railway API service | $5 credit/month (usually enough) |
-| Railway Celery worker | $5 credit/month shared |
-| Vercel frontend | Unlimited static deployments |
-| Gemini API | 500 requests/day free |
+| Platform | What's free | What happens when exceeded |
+|---|---|---|
+| Supabase | 500 MB storage, 2 projects | Project pauses (not deleted) |
+| Upstash | 500K Redis commands/month | Requests blocked until next month |
+| Render API | 750 hrs/month | Service suspended until next month |
+| Render Worker | 750 hrs/month | Worker suspended until next month |
+| Vercel | Unlimited static deployments | Never exceeded for this app |
+| Gemini API | 500 req/day per key | 429 errors until midnight Pacific |
 
-For light usage (a few PDFs, occasional comparison) the total cost is **$0**.
+For a demo/portfolio app with occasional use, **none of these limits will be hit**.
